@@ -1,0 +1,17 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Data a firemní dokumenty (Kritické!)
+docs/
+incoming/
+*.pdf
+*.docx
+*.xlsx
+*.txt
+
+# OS soubory
+.DS_Store
+Thumbs.db
