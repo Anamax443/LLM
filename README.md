@@ -46,6 +46,7 @@ Zeptáte se přirozeným jazykem (např. *„jak obnovit server ze zálohy?"*) �
 | `dokumentace.md` | Technická dokumentace (architektura, provoz, known issues) |
 | `docs/BUILD.md` | **Výrobní návod — postavení celého systému od nuly** |
 | `docs/HANDOFF.md` | Aktuální stav projektu a přijatá rozhodnutí |
+| `docs/OPONENTURA.md` | Obhajovací podklad (rozhodnutí, rizika, NFR, kapacita, DR, TCO) |
 | `requirements.txt` | Python závislosti |
 
 ## Rychlý start
@@ -81,15 +82,21 @@ python3 api.py                  # ve druhém → http://SERVER:8000
 
 > Datové komponenty (cesty, rozsah) běží na **vzorových datech** a jsou připravené na napojení na backend (`/api/settings`, `/api/scope`).
 
-## Roadmapa (rozhodnuto)
+## Roadmapa (reprioritizováno po oponentuře)
 
-- **Reconciliation ingest** místo čistého inotify (kvůli síťovým cestám — inotify na SMB/CIFS nefunguje spolehlivě).
-- **SQL Server 2019** jako: manifest stavu syncu, audit dotazů/odpovědí (dokladovatelnost), později živý datový zdroj (Dynamics 365 BC) přes text-to-SQL.
-- **Hybridní hledání** = Qdrant (sémantika) + SQL Full-Text (přesné termíny: IP, kódy, názvy).
-- **Editovatelné cesty v Nastavení**, uložené v SQL, promítané reconciliation skenem; odebrání cesty = smazání z báze; každá změna do auditu.
-- **Streaming odpovědí** + volba modelu/GPU pro rychlost.
+1. **Ověření jádra** — reconciliation cyklus na SMB (mtime/size, hash jen změněných) + konektivita Linux → SQL19.
+2. **Řízení přístupu (MVP, podmínka nasazení)** — AD/Entra autentizace, indexace ACL u dokumentu, filtr výsledků dle identity. Bez toho RAG zplošťuje NTFS oprávnění = bezpečnostní regrese.
+3. **Oprava stale vektorů + verzování dokumentů** — mazání bloků dle zdroje před upsertem, `on_deleted`, relativní cesta, Qdrant payload index.
+4. **Testovací sada + benchmark modelů** — embedding (nomic vs multilingual-e5 / BGE-m3, kvůli češtině) i generativních (vč. kvantizace).
+5. **Parsing** — OCR a struktura-aware zpracování tabulek (XLSX/PDF).
+6. **Hybridní hledání** — Qdrant **dense + sparse** vektory + RRF/rerank (kvůli rychlosti nativně v Qdrantu, ne SQL FTS).
+7. **Rychlost** — streaming odpovědí, volba modelu/GPU.
+8. **Provoz** — monitoring, DR, systemd, audit s maskováním PII, feedback smyčka.
+9. **Samostatná fáze:** živá data z Dynamics 365 BC přes text-to-SQL (vlastní rizikový profil).
 
-Detaily a stav viz [docs/HANDOFF.md](docs/HANDOFF.md).
+**SQL Server 2019** slouží jako manifest stavu syncu, audit (s maskováním PII) a později živý datový zdroj — **ne** jako vektorová DB ani search engine. **Editovatelné cesty v Nastavení** (operátorem, bez IT), uložené v SQL, promítané reconciliation skenem; odebrání = smazání z báze.
+
+Obhajoba rozhodnutí, rizika, NFR, kapacita, DR a TCO: **[docs/OPONENTURA.md](docs/OPONENTURA.md)**. Živý stav: [docs/HANDOFF.md](docs/HANDOFF.md).
 
 ## Bezpečnost
 

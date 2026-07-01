@@ -24,3 +24,4 @@ Projekt je spravován přes Git.
 - **[README.md](README.md)** / [README.en.md](README.en.md) — přehled projektu.
 - **[docs/BUILD.md](docs/BUILD.md)** / [BUILD.en.md](docs/BUILD.en.md) — výrobní návod, postavení od nuly.
 - **[docs/HANDOFF.md](docs/HANDOFF.md)** — aktuální stav, přijatá rozhodnutí, známé bugy a další kroky (vč. přechodu na reconciliation ingest, SQL Server 2019 a hybridního hledání).
+- **[docs/OPONENTURA.md](docs/OPONENTURA.md)** — obhajovací podklad: rozhodnutí + alternativy, rizika, NFR, kapacitní plán, DR, threat model, TCO a reakce na oponenturu.

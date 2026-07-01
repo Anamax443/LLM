@@ -103,7 +103,9 @@ The UI expects `POST /ask` (working) and `GET /api/version` (working); `GET /api
 3. Open `http://SERVER:8000/` → Assistant tab → same query → answer + sources.
 4. Footer shows the **commit hash** and a green health dot.
 
-**Before running production over network paths, verify section 6** — whether inotify fires on your specific mount, or a reconciliation scan is required.
+**Before running production over network paths, verify section 6** — the reconciliation cycle (primarily `LastWriteTime`+size, hashing only changed files) and Linux → SQL19 connectivity.
+
+> ⚠️ **Access control is mandatory before production.** Without authentication (AD/Entra) and result filtering by user permissions, RAG **flattens NTFS rights** — anyone would receive the content of any indexed document. See [OPONENTURA.md](OPONENTURA.md) §5.1 (Czech) and roadmap step 2. The prototype may only run in a closed environment with non-confidential data.
 
 ## 10. SQL Server 2019 (roadmap)
 

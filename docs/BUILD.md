@@ -107,7 +107,9 @@ UI čeká endpointy `POST /ask` (funkční) a `GET /api/version` (funkční); `G
 3. Otevřete `http://SERVER:8000/` → záložka Asistent → stejný dotaz → odpověď + zdroje.
 4. Patička ukazuje **commit hash** a zelený health.
 
-**Než se spustí ostrý provoz nad síťovými cestami, ověřte bod „Síťové cesty" (6)** — jestli inotify na vašem konkrétním mountu chytá, nebo je nutný reconciliation sken.
+**Než se spustí ostrý provoz nad síťovými cestami, ověřte bod „Síťové cesty" (6)** — reconciliation cyklus (primárně `LastWriteTime`+velikost, hash jen u změněných souborů) a konektivitu Linux → SQL19.
+
+> ⚠️ **Před produkčním nasazením je povinné řízení přístupu.** Bez autentizace (AD/Entra) a filtru výsledků podle oprávnění uživatele RAG **zplošťuje NTFS práva** — každý by dostal obsah libovolného naindexovaného dokumentu. Viz [OPONENTURA.md](OPONENTURA.md) kap. 5.1 a roadmapa krok 2. Prototyp lze provozovat jen v uzavřeném prostředí s neutajovanými daty.
 
 ## 10. SQL Server 2019 (roadmapa)
 

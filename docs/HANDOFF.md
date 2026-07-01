@@ -12,6 +12,7 @@
 - **Web UI (nové):** `web/index.html` — homepage dle AXIMA UI standardu, 4 záložky (Asistent / Nastavení / Dokumentace / Manažerský výstup), dark+light, tisk light, CS+EN, servisní patička (hodiny + commit hash + health).
 - **`api.py` doplněno:** `GET /api/version` (kontrakt `{commit,branch,builtAt,startedAt}`) + servírování `web/`.
 - **Dokumentace:** README (CS+EN), BUILD (CS+EN, výrobní), tato HANDOFF, `requirements.txt`, `.env.example`. `README-old.md` **odstraněn** (popisoval jinou/špatnou architekturu — Open WebUI/qwen2 — a mátl).
+- **[OPONENTURA.md](OPONENTURA.md) v2** — obhajovací podklad přepracovaný po 4 nezávislých kritických posudcích (přijaté i odmítnuté nálezy, reprioritizovaná roadmapa, NFR/kapacita/DR/threat model/TCO). Kopie i v uživatelově Downloads (HTML + MD).
 
 ## 2. Přijatá rozhodnutí (zafixováno v debatě 2026-07-01)
 
@@ -24,6 +25,11 @@
 7. **Identita dokumentu = plná relativní cesta** (ne jen název souboru — jinak kolize stejnojmenných souborů z různých složek).
 8. **Překlady:** lokalizovat **UI (CS+EN)**; **obsah odpovědí nepřekládat** — řídí se jazykem zdrojových dokumentů (dnes CS). Cíl: odpovídat v jazyce dotazu.
 9. **Manažerská/prezentační vrstva:** report + tisknutelný rozsah báze = ano (hotovo v UI). Velká prezentace až **po ověření jádra**.
+10. **Řízení přístupu (AD/Entra + ACL filtr) = MVP, ne roadmapa.** RAG zplošťuje NTFS oprávnění → bez toho je systém bezpečnostní regrese a boří ISO/NIS2 argument. Ingest indexuje ACL, API filtruje výsledky dle identity. (Nález č. 1 z oponentury.)
+11. **Lexikální hledání nativně v Qdrantu (dense + sparse vektory) — NE SQL FTS.** Důvod: **rychlost** (jeden systém, RRF fúze, žádná cross-DB latence). SQL zůstává na manifest/audit/živá data.
+12. **Embedding model se před produkcí benchmarkne** (nomic je anglicky-centrický → riziko pro češtinu; test multilingual-e5 / BGE-m3). Volba dle čísel, ne default.
+13. **Parsing musí umět OCR + tabulky** (scan PDF jinak neviditelné, XLSX ztrácí kontext). **Verzování dokumentů** (stará vs nová směrnice). **Reconciliation: mtime/size first, hash jen změněných** (I/O na SMB).
+14. **Metriky bez testovací sady = jen cíle.** Sada ≥150 dotazů + evaluace vznikne před tvrzeními o kvalitě. „≈0 % halucinací" zrušeno → „< 2 %, měřeno". ISO/NIS2 přeformulováno (on-prem ≠ soulad; motivace = klasifikace dat). Text-to-SQL nad BC = samostatná fáze.
 
 ## 3. Známé bugy / dluhy (v současném kódu)
 
@@ -34,15 +40,19 @@
 - **`api.py` poslouchá na `0.0.0.0`** — vědomě (aby web UI bylo dostupné z klientů); zvážit reverzní proxy/omezení.
 - **Chybí payload index** v Qdrantu na `source` → mazání/update podle dokumentu je full-scan (pomalé ve škále).
 
-## 4. Další kroky (pořadí)
+## 4. Další kroky (reprioritizováno po oponentuře)
 
-1. **Ověřit jádro (verify-core):** test, zda inotify na cílovém SMB mountu chytá události — rozhodne, jak agresivně tlačit reconciliation. + ověřit konektivitu Linux → SQL19.
-2. **Reconciliation ingest** + relativní cesty + Qdrant payload index + `on_deleted` + oprava stale vektorů.
-3. **SQL19:** schéma (settings/paths, audit, manifest) + `pyodbc` napojení; zapojit endpointy `GET /api/scope`, `POST /api/settings` (dnes UI běží na vzorových datech).
-4. **Hybridní hledání** (Qdrant + SQL Full-Text) + rerank.
-5. **Streaming odpovědí** + volba modelu/GPU pro rychlost.
-6. **Feedback smyčka** (👍/👎 do SQL) — realistická podoba „dlouhodobého učení"; fine-tuning jen jako vědomý dozorovaný krok.
-7. Produkce: systemd unit soubory (`deploy/`), řízení přístupu ke stahování zdrojových dokumentů.
+Podrobně vč. odhadu pracnosti v [OPONENTURA.md](OPONENTURA.md) kap. 13.
+
+1. **Ověření jádra** — reconciliation cyklus na SMB (mtime/size), konektivita Linux → SQL19. *(pozn.: „test inotify" vypuštěn — rozhodnutí 3 už inotify opustilo.)*
+2. **Řízení přístupu (MVP)** — AD/Entra auth, indexace ACL u dokumentu, filtr výsledků dle identity. **Podmínka nasazení.**
+3. **Oprava stale vektorů + verzování dokumentů** — mazání bloků dle zdroje před upsertem, `on_deleted`, relativní cesta, Qdrant payload index. **Pre-MVP.**
+4. **Testovací sada + benchmark** embedding (nomic vs multilingual-e5 vs BGE-m3) a generativních modelů (vč. kvantizace, češtiny).
+5. **Parsing** — OCR, tabulky (XLSX/PDF), struktura-aware chunking.
+6. **Hybridní hledání** — Qdrant dense + sparse + RRF/rerank (SQL FTS opuštěno).
+7. **Rychlost** — streaming, volba modelu/GPU.
+8. **Provoz** — monitoring, DR, systemd, audit s maskováním PII, feedback smyčka.
+9. **Samostatná fáze:** živá data z BC přes text-to-SQL (vlastní rizikový profil).
 
 ## 5. Jak navázat
 

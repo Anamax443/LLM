@@ -30,6 +30,7 @@ You ask in natural language (e.g. *"how do I restore a server from backup?"*) �
 | `dokumentace.md` | Technical documentation (Czech) |
 | `docs/BUILD.md` | **Build manual — build the whole system from scratch** ([EN](docs/BUILD.en.md)) |
 | `docs/HANDOFF.md` | Current project state and decisions |
+| `docs/OPONENTURA.md` | Defense material (decisions, risks, NFRs, capacity, DR, TCO) — Czech |
 | `requirements.txt` | Python dependencies |
 
 ## Quick start
@@ -65,15 +66,21 @@ python3 api.py                  # terminal 2 → http://SERVER:8000
 
 > Data components (paths, scope) run on **sample data** and are ready to be wired to the backend (`/api/settings`, `/api/scope`).
 
-## Roadmap (decided)
+## Roadmap (re-prioritised after peer review)
 
-- **Reconciliation ingest** instead of pure inotify (network paths — inotify over SMB/CIFS is unreliable).
-- **SQL Server 2019** as: sync state manifest, query/answer audit (auditability), later a live data source (Dynamics 365 BC) via text-to-SQL.
-- **Hybrid search** = Qdrant (semantics) + SQL Full-Text (exact terms: IPs, codes, names).
-- **Editable paths in Settings**, stored in SQL, applied by the reconciliation scan; removing a path deletes it from the base; every change audited.
-- **Answer streaming** + model/GPU choice for speed.
+1. **Core verification** — reconciliation cycle over SMB (mtime/size, hash only changed files) + Linux → SQL19 connectivity.
+2. **Access control (MVP, deployment prerequisite)** — AD/Entra authentication, per-document ACL indexing, results filtered by identity. Without it, RAG flattens NTFS permissions = a security regression.
+3. **Stale-vector fix + document versioning** — delete blocks by source before upsert, `on_deleted`, relative path, Qdrant payload index.
+4. **Test set + model benchmark** — embedding (nomic vs multilingual-e5 / BGE-m3, for Czech) and generative (incl. quantisation).
+5. **Parsing** — OCR and structure-aware table handling (XLSX/PDF).
+6. **Hybrid search** — Qdrant **dense + sparse** vectors + RRF/rerank (native in Qdrant for speed, not SQL FTS).
+7. **Speed** — answer streaming, model/GPU choice.
+8. **Operations** — monitoring, DR, systemd, audit with PII masking, feedback loop.
+9. **Separate phase:** live data from Dynamics 365 BC via text-to-SQL (own risk profile).
 
-See [docs/HANDOFF.md](docs/HANDOFF.md) for detail and status.
+**SQL Server 2019** serves as sync-state manifest, audit (with PII masking) and later a live data source — **not** as a vector DB or search engine. **Editable paths in Settings** (operator, no IT), stored in SQL, applied by the reconciliation scan; removal deletes from the base.
+
+Decision rationale, risks, NFRs, capacity, DR and TCO: **[docs/OPONENTURA.md](docs/OPONENTURA.md)** (Czech). Live status: [docs/HANDOFF.md](docs/HANDOFF.md).
 
 ## Security
 
