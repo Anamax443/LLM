@@ -109,7 +109,7 @@ UI čeká endpointy `POST /ask` (funkční) a `GET /api/version` (funkční); `G
 
 **Než se spustí ostrý provoz nad síťovými cestami, ověřte bod „Síťové cesty" (6)** — reconciliation cyklus (primárně `LastWriteTime`+velikost, hash jen u změněných souborů) a konektivitu Linux → SQL19.
 
-> ⚠️ **Před produkčním nasazením je povinné řízení přístupu.** Bez autentizace (AD/Entra) a filtru výsledků podle oprávnění uživatele RAG **zplošťuje NTFS práva** — každý by dostal obsah libovolného naindexovaného dokumentu. Viz [OPONENTURA.md](OPONENTURA.md) kap. 5.1 a roadmapa krok 2. Prototyp lze provozovat jen v uzavřeném prostředí s neutajovanými daty.
+> ⚠️ **Před produkčním nasazením je povinné řízení přístupu.** Bez autentizace (AD/Entra) a filtru výsledků podle oprávnění uživatele RAG **zplošťuje NTFS práva** — každý by dostal obsah libovolného naindexovaného dokumentu. Reconciliation přitom musí sledovat i **ACL/security-descriptor** (změna práv nemění mtime/velikost, jinak zůstane v Qdrantu stará ACL) a autorizovat za běhu dle tranzitivního členství uživatele. Viz [OPONENTURA.md](OPONENTURA.md) kap. 4.4/5.1 a roadmapa krok 2. Prototyp lze provozovat jen v uzavřeném prostředí s neutajovanými daty.
 
 ## 10. SQL Server 2019 (roadmapa)
 

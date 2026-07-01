@@ -73,20 +73,20 @@ python3 api.py                  # ve druhém → http://SERVER:8000
 
 ## Web UI — funkčnost
 
-`web/index.html` servíruje `api.py` na `/`. Vlastnosti:
+`web/index.html` servíruje `api.py` na `/` (samostatný soubor, bez frameworku, **AXIMA logo** v hlavičce). Záložky:
 
 - **Asistent** — chat proti `POST /ask`; při nedostupném backendu ukázkový režim.
-- **Nastavení** — správa hlídaných cest (přidat/odebrat, podadresáře, přípony, aktivní), model, teplota, počet bloků. *Cesty jsou editovatelné operátorem — bez zásahu IT.*
-- **Dokumentace** — rozcestník (README, BUILD, technická dokumentace, HANDOFF), tisknutelný.
-- **Manažerský výstup** — netechnický přehled + **tisknutelný přehled rozsahu** (na jakou oblast dokumentů se asistent vztahuje). Tisk je vždy ve světlém režimu.
+- **Nastavení** — správa **hlídaných cest** (přidat/odebrat, podadresáře, přípony, aktivní) + **Stav skenování** (běh/nečinnost, poslední/příští sken, „Skenovat teď", per-cesta počet dokumentů/bloků a čerstvost) + model/teplota/počet bloků. *Cesty spravuje operátor bez zásahu IT.*
+- **Dokumentace** — plnohodnotná dokumentace **uvnitř aplikace** (boční menu + články: O aplikaci, Jak to funguje, Jak se ptát, Cesty a skenování, Bezpečnost) ve firemním designu, **bez odkazů na git či soubory**.
+- **Manažerský výstup** — netechnický přehled + **tisknutelný přehled rozsahu** báze (s **AXIMA logem** v hlavičce tisku). Tisk je vždy ve světlém režimu.
 - Přepínač **CS/EN**, **dark/light**, patička s **živými hodinami + commit hashem + health** (kontrakt `GET /api/version`).
 
-> Datové komponenty (cesty, rozsah) běží na **vzorových datech** a jsou připravené na napojení na backend (`/api/settings`, `/api/scope`).
+> Datové komponenty (cesty, sken, rozsah) běží na **vzorových datech** a jsou připravené na napojení na backend (`/api/settings`, `/api/scope`, `/api/scan`).
 
 ## Roadmapa (reprioritizováno po oponentuře)
 
-1. **Ověření jádra** — reconciliation cyklus na SMB (mtime/size, hash jen změněných) + konektivita Linux → SQL19.
-2. **Řízení přístupu (MVP, podmínka nasazení)** — AD/Entra autentizace, indexace ACL u dokumentu, filtr výsledků dle identity. Bez toho RAG zplošťuje NTFS oprávnění = bezpečnostní regrese.
+1. **Ověření jádra** — reconciliation cyklus na SMB (mtime/size **+ ACL**, hash jen změněných) + konektivita Linux → SQL19.
+2. **Řízení přístupu (MVP, podmínka nasazení)** — AD/Entra autentizace, indexace ACL u dokumentu, filtr výsledků dle identity. Bez toho RAG zplošťuje NTFS oprávnění = bezpečnostní regrese. **Čerstvost ACL:** sken sleduje i security-descriptor (změna práv nemění mtime), autorizace dle tranzitivního členství uživatele.
 3. **Oprava stale vektorů + verzování dokumentů** — mazání bloků dle zdroje před upsertem, `on_deleted`, relativní cesta, Qdrant payload index.
 4. **Testovací sada + benchmark modelů** — embedding (nomic vs multilingual-e5 / BGE-m3, kvůli češtině) i generativních (vč. kvantizace).
 5. **Parsing** — OCR a struktura-aware zpracování tabulek (XLSX/PDF).
@@ -101,4 +101,4 @@ Obhajoba rozhodnutí, rizika, NFR, kapacita, DR a TCO: **[docs/OPONENTURA.md](do
 
 ## Bezpečnost
 
-Složky `docs/` a `incoming/` a všechny dokumenty (`*.docx`, `*.pdf`, `*.xlsx`, …) jsou v `.gitignore`, aby nedošlo k úniku firemních dat. Připojovací údaje patří do `.env` (viz `.env.example`), **nikdy ne do Gitu**.
+Firemní dokumenty (`*.docx`, `*.pdf`, `*.xlsx`, …) a složka `incoming/` jsou v `.gitignore`, aby nedošlo k úniku dat (dokumentace v `docs/` se naopak verzuje). Připojovací údaje patří do `.env` (viz `.env.example`), **nikdy ne do Gitu**.

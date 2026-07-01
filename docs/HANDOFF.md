@@ -2,17 +2,17 @@
 
 Živý pracovní dokument. **Aktualizuje se po každé změně + commit** (aby se dalo navázat z jiného stroje / mezi lidmi — na projektu se pracuje společně, commituje i kolega `stepancerny1-cyber`).
 
-**Poslední aktualizace:** 2026-07-01
+**Poslední aktualizace:** 2026-07-01 (oponentura v3, UI: stav skenování + firemní dokumentace + logo v tisku)
 
 ---
 
 ## 1. Co je hotové
 
 - **Backend (POC, funkční):** `watchdog_service.py` (ingest), `api.py` (`POST /ask`), `ask_ai.py` (CLI). Stack Ollama (`nomic-embed-text` + `llama3.1`) + Qdrant (`axima_docs`, 768D).
-- **Web UI (nové):** `web/index.html` — homepage dle AXIMA UI standardu, 4 záložky (Asistent / Nastavení / Dokumentace / Manažerský výstup), dark+light, tisk light, CS+EN, servisní patička (hodiny + commit hash + health).
+- **Web UI (nové):** `web/index.html` — homepage dle AXIMA UI standardu, **AXIMA logo v hlavičce**, 4 záložky, dark+light, tisk light (**logo v hlavičce tisku**), CS+EN, servisní patička (hodiny + commit hash + health). Nastavení má **Stav skenování** (poslední/příští sken, „Skenovat teď", per-cesta dokumenty/bloky/čerstvost). Dokumentace = **plnohodnotné firemní články uvnitř aplikace** (boční menu, CS+EN, bez odkazů na git/soubory). Vše na vzorových datech, připraveno na `/api/settings`, `/api/scope`, `/api/scan`.
 - **`api.py` doplněno:** `GET /api/version` (kontrakt `{commit,branch,builtAt,startedAt}`) + servírování `web/`.
-- **Dokumentace:** README (CS+EN), BUILD (CS+EN, výrobní), tato HANDOFF, `requirements.txt`, `.env.example`. `README-old.md` **odstraněn** (popisoval jinou/špatnou architekturu — Open WebUI/qwen2 — a mátl).
-- **[OPONENTURA.md](OPONENTURA.md) v2** — obhajovací podklad přepracovaný po 4 nezávislých kritických posudcích (přijaté i odmítnuté nálezy, reprioritizovaná roadmapa, NFR/kapacita/DR/threat model/TCO). Kopie i v uživatelově Downloads (HTML + MD).
+- **Dokumentace:** README (CS+EN), BUILD (CS+EN, výrobní), JAK-FUNGUJE-UCENI (CS+EN), tato HANDOFF, `requirements.txt`, `.env.example`. `README-old.md` **odstraněn** (mátl). `.gitignore` opraven — `docs/` se verzuje, chrání se firemní dokumenty podle typu.
+- **[OPONENTURA.md](OPONENTURA.md) v3** — obhajovací podklad po 5 kolech posudků (poslední: oprava čerstvosti ACL v reconciliation; + metriky s k/precision, práh „nevím", reálné odhady, ROI, failure modes, životní cyklus, ADR/STRIDE, human-in-the-loop). Kopie v Downloads (HTML s logem + MD).
 
 ## 2. Přijatá rozhodnutí (zafixováno v debatě 2026-07-01)
 

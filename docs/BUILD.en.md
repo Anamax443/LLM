@@ -105,7 +105,7 @@ The UI expects `POST /ask` (working) and `GET /api/version` (working); `GET /api
 
 **Before running production over network paths, verify section 6** — the reconciliation cycle (primarily `LastWriteTime`+size, hashing only changed files) and Linux → SQL19 connectivity.
 
-> ⚠️ **Access control is mandatory before production.** Without authentication (AD/Entra) and result filtering by user permissions, RAG **flattens NTFS rights** — anyone would receive the content of any indexed document. See [OPONENTURA.md](OPONENTURA.md) §5.1 (Czech) and roadmap step 2. The prototype may only run in a closed environment with non-confidential data.
+> ⚠️ **Access control is mandatory before production.** Without authentication (AD/Entra) and result filtering by user permissions, RAG **flattens NTFS rights** — anyone would receive the content of any indexed document. The reconciliation scan must also track the **ACL/security descriptor** (a permission change doesn't alter mtime/size, otherwise a stale ACL remains in Qdrant) and authorize at query time by the user's transitive membership. See [OPONENTURA.md](OPONENTURA.md) §4.4/5.1 (Czech) and roadmap step 2. The prototype may only run in a closed environment with non-confidential data.
 
 ## 10. SQL Server 2019 (roadmap)
 

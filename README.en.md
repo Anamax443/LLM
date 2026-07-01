@@ -57,20 +57,20 @@ python3 api.py                  # terminal 2 → http://SERVER:8000
 
 ## Web UI — functionality
 
-`web/index.html` is served by `api.py` at `/`:
+`web/index.html` is served by `api.py` at `/` (single self-contained file, no framework, **AXIMA logo** in the header). Tabs:
 
 - **Assistant** — chat against `POST /ask`; sample mode when the backend is down.
-- **Settings** — manage watched paths (add/remove, subfolders, extensions, active), model, temperature, block count. *Paths are operator-editable — no IT technician needed.*
-- **Documentation** — printable directory (README, BUILD, technical docs, HANDOFF).
-- **Management report** — non-technical overview + **printable scope overview** (which document areas the assistant covers). Printing is always in light mode.
+- **Settings** — manage **watched paths** (add/remove, subfolders, extensions, active) + **Scan status** (idle/running, last/next scan, "Scan now", per-path document/block counts and freshness) + model/temperature/block count. *Paths are managed by the operator without IT.*
+- **Documentation** — full documentation **inside the app** (side menu + articles: About, How it works, How to ask, Paths & scanning, Security) in corporate design, **no git/filesystem links**.
+- **Management report** — non-technical overview + **printable scope overview** (with the **AXIMA logo** in the print header). Printing is always in light mode.
 - **CS/EN** switch, **dark/light**, footer with **live clock + commit hash + health** (`GET /api/version` contract).
 
-> Data components (paths, scope) run on **sample data** and are ready to be wired to the backend (`/api/settings`, `/api/scope`).
+> Data components (paths, scan, scope) run on **sample data** and are ready to be wired to the backend (`/api/settings`, `/api/scope`, `/api/scan`).
 
 ## Roadmap (re-prioritised after peer review)
 
-1. **Core verification** — reconciliation cycle over SMB (mtime/size, hash only changed files) + Linux → SQL19 connectivity.
-2. **Access control (MVP, deployment prerequisite)** — AD/Entra authentication, per-document ACL indexing, results filtered by identity. Without it, RAG flattens NTFS permissions = a security regression.
+1. **Core verification** — reconciliation cycle over SMB (mtime/size **+ ACL**, hash only changed files) + Linux → SQL19 connectivity.
+2. **Access control (MVP, deployment prerequisite)** — AD/Entra authentication, per-document ACL indexing, results filtered by identity. Without it, RAG flattens NTFS permissions = a security regression. **ACL freshness:** the scan also tracks the security descriptor (a permission change doesn't alter mtime), with authorization by the user's transitive group membership.
 3. **Stale-vector fix + document versioning** — delete blocks by source before upsert, `on_deleted`, relative path, Qdrant payload index.
 4. **Test set + model benchmark** — embedding (nomic vs multilingual-e5 / BGE-m3, for Czech) and generative (incl. quantisation).
 5. **Parsing** — OCR and structure-aware table handling (XLSX/PDF).
@@ -85,4 +85,4 @@ Decision rationale, risks, NFRs, capacity, DR and TCO: **[docs/OPONENTURA.md](do
 
 ## Security
 
-`docs/`, `incoming/` and all documents are gitignored to prevent leaking company data. Connection credentials belong in `.env` (see `.env.example`), **never in Git**.
+Company documents (`*.docx`, `*.pdf`, `*.xlsx`, …) and the `incoming/` folder are gitignored to prevent leaking data (documentation under `docs/` is versioned). Connection credentials belong in `.env` (see `.env.example`), **never in Git**.
