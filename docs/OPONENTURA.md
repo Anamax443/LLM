@@ -2,15 +2,21 @@
 
 **Projekt:** Lokální AI asistent (RAG) nad interní firemní dokumentací
 **Repozitář:** Axima-Git/LLM · **Stav:** funkční prototyp + UI, roadmapa do produkce
-**Verze podkladu:** 2.0 (2026-07-01) — přepracováno po čtyřech nezávislých oponenturách
+**Verze podkladu:** 3.0 (2026-07-01) — po pátém kole nezávislých oponentur
 
 > Účel: poskytnout hodnoticí komisi úplný technický i manažerský obraz projektu, obhájit rozhodnutí, otevřeně pojmenovat rizika a omezení a předjímat kritické otázky. Verze 2.0 reaguje na nezávislé posudky — opravuje přehnaná tvrzení, přeřazuje priority a doplňuje dosud chybějící kapitoly. Sekce, u kterých s posudky nesouhlasím, jsou uvedeny v kap. 14.
 
 ---
 
-## 0. Co se změnilo ve verzi 2.0
+## 0. Co se změnilo ve verzích
 
-Verze 1.0 byla podrobena čtyřem nezávislým kritickým posudkům. Hlavní změny:
+**Verze 3.0 (5. kolo posudků):**
+- **Oprava kritického nálezu:** změna NTFS ACL nemění mtime/velikost → reconciliation musí sledovat i ACL/security-descriptor; autorizace za běhu dle tranzitivního členství (4.4, 5.1).
+- Retrieval metrika s explicitním **k** + precision@k/NDCG (2.3); **práh pro „nevím"** a ochrana dat u LLM-judge (8).
+- **Reálné odhady pracnosti** (dřívější byly optimistické) + Definice hotového (13); **ROI** (10.1).
+- Doplněno: failure modes + životní cyklus dat (9.5–9.6), zamítnuté alternativy / proč FastAPI (4.10), human-in-the-loop pro důvěrné (5.5); opatrnější závěr.
+
+**Verze 2.0 (4 nezávislé posudky):** Hlavní změny:
 - **Řízení přístupu** přesunuto z „roadmapa krok 7" na **MVP (krok 2)** — bez něj systém zavádí bezpečnostní regresi (viz 5.1).
 - Odstraněn nesplnitelný cíl „≈0 % halucinací"; zavedena měřitelná metrika a evaluační metodika (2.3, 8).
 - Přeformulován vztah k ISO/NIS2: on-premise **není** sám o sobě soulad (5).
@@ -42,7 +48,8 @@ Model **pracuje s našimi soubory a informacemi v nich** (přes RAG — dokument
 ### 2.3 Měřitelná kritéria úspěchu (revidováno)
 | Kritérium | Cíl | Měření |
 |---|---|---|
-| Retrieval (správný zdroj v top-k) | ≥ 85 % | testovací sada ≥ 150 dotazů, ground truth |
+| Retrieval — správný zdroj v **top-k** (k = počet chunků reálně předaných modelu, ~3–5) | ≥ 85 % | testovací sada ≥ 150 dotazů, ground truth |
+| Přesnost retrievalu — **precision@k / NDCG@k** | sledovat | tatáž sada — chrání před zavádějícími zdroji |
 | Kvalita odpovědi (věcně správná) | ≥ 80 % | ruční hodnocení odborníkem + LLM-as-judge |
 | Míra halucinace | **< 2 %** (ne nula — viz 14) | anotace na testovací sadě |
 | Doba do první části odpovědi | < 3 s (streaming, GPU) | měření na cílovém HW |
@@ -67,7 +74,7 @@ Síťové cesty (\\fileserver\...)                Uživatel (autentizovaný)
   (dense 768D + sparse)                                    │
                                                            ▼
   SQL Server 2019                                  Ollama (LLM) → odpověď + zdroje
-  (manifest, audit s maskováním, živá data BC)
+  (manifest, audit s maskováním; živá data BC = fáze 2)
 ```
 
 **Komponenty (open-source, lokálně):** Ollama (embedding + generování), Qdrant (vektory dense + sparse), FastAPI (API + UI), SQL Server 2019 (stav, audit, později živá data — již vlastněno).
@@ -88,6 +95,8 @@ Síťové cesty (\\fileserver\...)                Uživatel (autentizovaný)
 ### 4.4 Ingest: reconciliation
 **Rozhodnutí:** reconciliation sken (ne inotify). **Důvod:** inotify na SMB/CIFS nespolehlivý; sken je samoopravný, zvládá podadresáře a mazání. **Optimalizace (nově):** cyklus se **primárně opírá o `LastWriteTime` + velikost**; hash počítá **jen u změněných** souborů — jinak by hashování tisíců souborů přes SMB každých 15 min zahltilo síť i diskové pole. (Pozn.: dřívější formulace „testovat inotify" byla vnitřně rozporná a je odstraněna — krok 1 roadmapy ověřuje reconciliation cyklus a konektivitu, ne inotify.)
 
+> **Pozor — ACL vs mtime/size (nález 5. kola):** změna NTFS oprávnění **nemění mtime ani velikost** souboru → mtime/size sken by ji nezachytil a v Qdrantu by zůstala **stará ACL** (uživatel s odebraným přístupem by ho přes asistenta stále měl). Proto reconciliation sleduje **i security-descriptor / ACL** (samostatný hash oprávnění, nezávisle na obsahu). A protože seznam „skupin s přístupem" neunese vnořené AD skupiny, deny ACE ani dědičnost, autorizace se dělá **za běhu proti plnému tranzitivnímu členství uživatele** (s hlídáním čerstvosti cache), ne jen dle uloženého seznamu skupin.
+
 ### 4.5 Hybridní hledání (přehodnoceno)
 **Rozhodnutí:** dense + lexikální, **doporučeně nativně v Qdrantu** (dense + sparse vektory, podpora od 1.11), s fúzí **RRF** a případně cross-encoder rerankerem na top-k. **Důvod:** embeddingy jsou slabé na přesné tokeny (IP adresy, kódy) — lexikální větev je nutná; ale fúzovat přes dvě různé DB (Qdrant API + T-SQL) je latentně neohrabané. SQL Full-Text zůstává **záložní variantou** — rozhodnutí Qdrant-sparse vs SQL-FTS padne **po benchmarku** na české sadě. **Korekce tvrzení:** neplatí „poráží každou metodu samostatně"; správně „očekáváme vyšší přesnost, ověřenou měřením" — naivní fúze bez RRF/rerankeru může i degradovat.
 
@@ -105,6 +114,11 @@ Soulad s firemním UI standardem, plná kontrola nad výstupy a řízením pří
 - **Parsing:** naivní „čtení → chunk" je pro naše dokumenty nedostatečné. **XLSX** (IP plán) rozsekaný na plochý text ztrácí vazbu řádek/sloupec; **scanned PDF** bez OCR jsou pro systém neviditelné; **tabulky v PDF** se rozpadnou. Nutné **struktura-aware parsing (OCR, tabulky)** — determinuje přesnost víc než volba LLM.
 - **Verzování dokumentů:** dedup podle hashe nechytí *verze* téže směrnice → stará i nová se naindexují a asistent může citovat neplatnou. Nutné evidovat verzi (cesta + hash + časová značka) a preferovat poslední; při konfliktu obsahu to signalizovat.
 
+### 4.10 Zamítnuté alternativy (stručné ADR) a „proč FastAPI"
+- **Vektorová DB:** Qdrant zvolen před **Milvus/Weaviate** (těžší provoz), **pgvector** (další DB server navíc) a **Elasticsearch** (silný na lexiku, slabší na čistou vektorovou škálu + další stack). Rozhodnutí = specializace + snadné nasazení.
+- **API — FastAPI:** async, automatické OpenAPI, Python ekosystém (sdílí jazyk s ingestem/embeddingem), triviální nasazení; alternativy (Flask sync, Node) bez přínosu.
+- Threat model (5.3) vychází z metodiky **STRIDE**; plná matice alternativ je vedena mimo tento podklad.
+
 ---
 
 ## 5. Bezpečnost a soulad (ISO 27001 / NIS2 / GDPR)
@@ -120,6 +134,8 @@ RAG **zplošťuje NTFS oprávnění**: naindexováním dokumentů do Qdrantu bez
 - API **filtruje výsledky Qdrantu podle identity a členství uživatele** — vrátí jen to, na co má práva.
 - Role: `viewer` / `operator` (správa cest) / `admin`.
 
+**Čerstvost oprávnění = bezpečnost, ne výkon:** ACL se přeindexovává i při změně práv (ne jen obsahu — viz 4.4) a rozhodnutí padá **za běhu** dle tranzitivního členství uživatele. Zastaralá ACL cache = bezpečnostní chyba, ne jen nekonzistence.
+
 ### 5.2 Audit bez vzniku „shadow data store"
 Audit (kdo, kdy, dotaz, odpověď, zdroje) je nutný pro dohledatelnost. Riziko: dotaz může obsahovat osobní údaj → vzniká nové úložiště citlivých dat. **Opatření:** maskování/detekce PII (rodná čísla, e-maily) před zápisem, **retenční politika** a řízený přístup k auditu, výmaz z auditu jako součást GDPR procesu.
 
@@ -134,14 +150,18 @@ Audit (kdo, kdy, dotaz, odpověď, zdroje) je nutný pro dohledatelnost. Riziko:
 ### 5.4 GDPR
 Data lokálně; právo na výmaz = smazání dokumentu → reconciliation odstraní vektory i záznamy **i z auditu** (5.2).
 
+### 5.5 Citlivé dotazy a odpovědnost (human-in-the-loop)
+- U dokumentů třídy **důvěrné** (IP plán, infrastruktura): notifikace správci pro audit a/nebo upozornění „důvěrné — ověřte s nadřízeným".
+- „Odpovědnost na uživateli" (viz 15) **nestačí jako věta v UI** — patří do **podmínek použití** (právní review) a je nutné **logovat potvrzení**, že uživatel upozornění viděl.
+
 ---
 
 ## 6. Nefunkční požadavky (NFR)
 
 | Kategorie | Požadavek |
 |---|---|
-| Výkon | odezva < 3 s do první části odpovědi (streaming, GPU) |
-| Dostupnost | cíl 99 % v pracovní době; degradace do „ukázkového režimu" při výpadku backendu |
+| Výkon | odezva < 3 s do první části odpovědi (streaming, GPU); rozpočet zahrnuje embed dotazu + hledání + RRF + rerank + prefill → **rerank proto podmíněný** |
+| Dostupnost | cíl 99 % v pracovní době; degradace do „ukázkového režimu" při výpadku. *Napětí: jeden server + bus factor 1 vs 99 % — přiznáno, mitigace HA/zaškolení na roadmapě.* |
 | Škálovatelnost | 1 000 → 100 000 dokumentů bez změny architektury |
 | Bezpečnost | autentizace, autorizace dle ACL, audit, maskování PII |
 | Provozovatelnost | přidání/odebrání cesty operátorem bez IT; monitoring; automatický restart |
@@ -158,7 +178,7 @@ Data lokálně; právo na výmaz = smazání dokumentu → reconciliation odstra
 | 10 000 dok | ~100 000 | ~300 MB | pohodlně v RAM |
 | 100 000 dok | ~1 000 000 | ~3 GB | stále zvládnutelné na jednom serveru |
 
-Vektorová databáze **není** úzké hrdlo. Úzké hrdlo je **generování na GPU** (viz 8, 10). Payload (text bloků) + SQL manifest/audit řádově v jednotkách GB. Doporučení: **Qdrant payload index na `source`** pro efektivní update/mazání ve škále.
+Vektorová databáze **není** úzké hrdlo. Úzké hrdlo je **generování na GPU** (viz 8, 10). Payload (text bloků) + SQL manifest/audit řádově v jednotkách GB. Doporučení: **Qdrant payload index na `source`** pro efektivní update/mazání ve škále. (Pozn.: při volbě 1024D modelu — e5-large/BGE-m3 — vzroste objem vektorů o ~⅓; stále jednotky GB.)
 
 ---
 
@@ -169,6 +189,10 @@ Vektorová databáze **není** úzké hrdlo. Úzké hrdlo je **generování na G
 2. **Metriky:** retrieval (správný zdroj v top-k), věcná správnost (ruční + LLM-as-judge), míra halucinace, latence.
 3. **Srovnání modelů:** min. 3 embedding modely (nomic vs multilingual-e5 vs BGE-m3) a 2–3 generativní (llama3.1 8B vs Qwen2.5 vs Mistral), včetně **kvantizace 4-bit** (rychlost vs kvalita).
 4. **Publikace výsledků** jako součást dokumentace + ukázky, kde model selhává (řízení očekávání uživatelů zvyklých na ChatGPT).
+5. **Spouštěč „nevím" (grounding gate):** když jsou všechna top-k skóre pod prahem, model negeneruje a odpoví „na tohle nemám podklad". Práh je parametr laděný na testovací sadě — bez něj „nevím" prakticky nenastane a halucinace se drží hůř.
+6. **LLM-as-judge s ochranou dat:** soudce doplnit **ruční kontrolou odborníka na ~20 % vzorku** (kalibrace shody; LLM má sklon nadhodnotit vlastní styl). Pokud judge = cloudový model, **evaluační sada nesmí obsahovat důvěrná data** — jinak porušuje princip lokálnosti; jinak judge on-prem.
+
+> Proč 150 dotazů: kompromis mezi pracností ruční anotace a statistickou vypovídací hodnotou pro pilot.
 
 **Výkonové cíle k doložení:** latence retrievalu (Qdrant) v ms, propustnost generování (tok/s) na cílové GPU, doba kompletní reindexace korpusu.
 
@@ -188,7 +212,19 @@ Health endpoint (běží), metriky latence/chybovosti/čerstvosti báze, alertin
 systemd služby (auto-start/restart), verzované nasazení, `GET /api/version` s commit hashem (živá kontrola verze v patičce UI).
 
 ### 9.4 Verzování embeddingů a upgrade modelu
-Změna embedding modelu nebo dimenze = **re-embedding celého korpusu** → plánovaná provozní událost (paralelní kolekce, přepnutí po ověření, rollback ponecháním staré kolekce). Verze embedding modelu se eviduje u kolekce.
+Změna embedding modelu nebo dimenze = **re-embedding celého korpusu** → plánovaná provozní událost (paralelní kolekce, přepnutí po ověření, rollback ponecháním staré kolekce). Verze embedding modelu se eviduje u kolekce. **Řádový odhad:** re-embedding ~100k dokumentů na jedné L4 = **hodiny až ~1 den** GPU dávky → switchover plánovat mimo špičku.
+
+### 9.5 Chování při výpadku (failure modes)
+| Výpadek | Co uvidí uživatel |
+|---|---|
+| Ollama/GPU nedostupné | jasná chyba „asistent dočasně nedostupný", ne prázdno |
+| Qdrant nedostupný | „nelze prohledat bázi" + health červená |
+| SQL nedostupný | asistent odpovídá, ale bez auditu/nastavení (degradace) |
+| Parsing/OCR selže u souboru | soubor přeskočen + zaznamenán, sken pokračuje |
+| Zastaralý sken | badge „zastaralá" u dotčených cest (Nastavení) |
+
+### 9.6 Životní cyklus dokumentu
+vznik → cesta → detekce skenem → parse → chunk → embedding → Qdrant + text/ACL v SQL → dotazy (audit) → změna/smazání → reconciliation odstraní vektory → retence auditu dle politiky.
 
 ---
 
@@ -203,6 +239,9 @@ Změna embedding modelu nebo dimenze = **re-embedding celého korpusu** → plá
 | **Lidská práce** (dokončení dle roadmapy + údržba ~0,25–0,5 FTE/rok) | **dominantní položka** |
 
 > „0 Kč za software" **neznamená** nulové TCO. U on-prem řešení je typicky **největší položkou lidský čas**, ne hardware. Férové srovnání s Azure OpenAI (EU rezidence) musí zahrnout provoz i údržbu — rozhoduje **klasifikace dat**, ne jen cena.
+
+### 10.1 ROI (řádový odhad, k doplnění z pilotu)
+Hledání informace ~5 min × ~20× týdně × 120 lidí → řádově **tisíce hodin ročně**. Při úspoře i jen 30 % se návratnost jednorázové HW investice + práce pohybuje v **měsících**, ne letech. Přesná čísla doplní reálná frekvence dotazů z pilotu.
 
 ---
 
@@ -237,23 +276,25 @@ Změna embedding modelu nebo dimenze = **re-embedding celého korpusu** → plá
 
 ## 13. Roadmapa do produkce (reprioritizováno + odhad pracnosti)
 
-| # | Krok | Odhad (člověkodny) |
+| # | Krok | Odhad (reálný rozsah) |
 |---|---|---|
-| 1 | **Ověření jádra** — reconciliation cyklus na SMB (mtime/size), konektivita Linux→SQL19 | 3 |
-| 2 | **Řízení přístupu (MVP)** — AD/Entra auth, indexace ACL, filtr dle identity | 10 |
-| 3 | **Oprava stale vektorů + verzování dokumentů** (mazání dle zdroje, `on_deleted`, rel. cesta, payload index) | 5 |
-| 4 | **Testovací sada + benchmark** embedding/generativních modelů (vč. češtiny, kvantizace) | 6 |
-| 5 | **Parsing** — OCR, tabulky (XLSX/PDF), struktura-aware chunking | 7 |
-| 6 | **Hybridní hledání** — Qdrant sparse + RRF/rerank (rozhodnout vs SQL FTS dle benchmarku) | 6 |
-| 7 | **Rychlost** — streaming, volba modelu/GPU | 3 |
-| 8 | **Provoz** — monitoring, DR, systemd, audit s maskováním, feedback smyčka | 6 |
-| 9 | **(Samostatná fáze)** živá data z BC přes text-to-SQL | vlastní projekt |
+| 1 | **Ověření jádra** — reconciliation cyklus na SMB (mtime/size + ACL), konektivita Linux→SQL19 | 3–5 |
+| 2 | **Řízení přístupu (MVP)** — AD/Entra auth, indexace + čerstvost ACL, filtr dle tranzitivního členství, pentest | 20–30 |
+| 3 | **Oprava stale vektorů + verzování dokumentů** (mazání dle zdroje, `on_deleted`, rel. cesta, payload index) | 5–8 |
+| 4 | **Testovací sada + benchmark** (vč. ruční anotace ≥150 dotazů, čeština, kvantizace) | 10–15 |
+| 5 | **Parsing** — OCR, tabulky (XLSX→JSON/Markdown řádky), struktura-aware chunking | 15–20 |
+| 6 | **Hybridní hledání** — Qdrant sparse + RRF/rerank | 8–12 |
+| 7 | **Rychlost** — streaming, volba modelu/GPU | 3–5 |
+| 8 | **Provoz** — monitoring, DR, systemd, audit s maskováním, feedback smyčka | 8–12 |
+| 9 | **(Samostatná fáze)** živá data z BC přes text-to-SQL (řízené šablony, ne volný text-to-SQL) | vlastní projekt |
+
+> **Odhady navýšeny na realistické rozsahy** (dřívějších „46 dnů" bylo optimistické — ACL, testovací sada a parsing jsou reálně řádově týdny; MVP do produkce ~2–3 měsíce). Každý krok má **Definici hotového** (např. krok 2: login + ACL filtr + audit + penetrační test + review).
 
 ---
 
 ## 14. Reakce na oponenturu — co přijímáme a co ne
 
-**Přijímáme (zapracováno výše):** priorita řízení přístupu; odstranění „0 % halucinací"; přeformulování ISO/NIS2; testovací sada a metodika; TCO s lidskou prací a konkrétní GPU; parsing (OCR/tabulky); benchmark embedding modelu; RRF/rerank a přehodnocení hybrid architektury; mtime/size v reconciliation; verzování dokumentů; audit jako GDPR úložiště; oprava rozporu inotify; text-to-SQL jako samostatná fáze; NFR/kapacita/DR/monitoring/threat model/bus factor.
+**Přijímáme (zapracováno výše):** priorita řízení přístupu; odstranění „0 % halucinací"; přeformulování ISO/NIS2; testovací sada a metodika; TCO s lidskou prací a konkrétní GPU; parsing (OCR/tabulky); benchmark embedding modelu; RRF/rerank a přehodnocení hybrid architektury; mtime/size v reconciliation; verzování dokumentů; audit jako GDPR úložiště; oprava rozporu inotify; text-to-SQL jako samostatná fáze; NFR/kapacita/DR/monitoring/threat model/bus factor. **(v3)** čerstvost ACL v reconciliation; explicitní k + precision@k/NDCG; práh pro „nevím"; ochrana dat u LLM-judge; reálné odhady + Definice hotového; ROI; failure modes + životní cyklus dat; ADR/STRIDE + proč FastAPI; human-in-the-loop pro důvěrné; právní ukotvení odpovědnosti.
 
 **Odmítáme / korigujeme:**
 - **„Generovat odpověď offline, pak streamovat" (proti halucinaci)** — **odmítáme.** Ruší to smysl streamingu (vnímaná latence) a lokální RAG odpověď stejně nelze ověřovat token po tokenu. Správná mitigace je grounding + citace, ne zdržení výstupu.
@@ -283,13 +324,13 @@ A: Struktura-aware parsing + OCR (krok 5); bez toho jsou scan PDF neviditelné a
 A: Znovuvyhodnocením na testovací sadě (krok 4) — bez ní změnu modelu neděláme.
 
 **Q: Co když asistent dá špatnou odpověď a uživatel podle ní rozhodne?**
-A: Systém vždy cituje zdroje; odpovědnost zůstává na uživateli — musí to být explicitně komunikováno v UI. Halucinace měříme a ohraničujeme, negarantujeme nulu.
+A: Systém vždy cituje zdroje; odpovědnost zůstává na uživateli — ukotveno v **podmínkách použití** (právní review) a logováno potvrzení, že uživatel upozornění viděl (viz 5.5). Halucinace měříme a ohraničujeme, negarantujeme nulu.
 
 ---
 
 ## 16. Závěr
 
-Projekt řeší reálný problém architekturou, která je při dokončení bezpečná, udržitelná a rozšiřitelná. Verze 2.0 opravuje slabá místa odhalená oponenturou: nadsazená tvrzení, chybějící provozní a evaluační kapitoly a především **prioritu řízení přístupu**, bez něhož by systém zaváděl bezpečnostní regresi a podkopával vlastní hlavní argument. Doporučené pokračování: realizovat roadmapu v novém pořadí, s **řízením přístupu a opravou stale vektorů před prvním nasazením** a s **testovací sadou a benchmarkem** jako podmínkou tvrzení o kvalitě.
+Projekt **navrhuje architekturu, která po implementaci plánovaných bezpečnostních a provozních opatření může splňovat** požadavky na bezpečné a udržitelné provozování v prostředí AXIMA. Verze 3.0 opravuje i poslední kritický nález (čerstvost ACL v reconciliation) a zpřesňuje evaluaci, odhady a provozní scénáře. Doporučené pokračování: realizovat roadmapu v novém pořadí, s **řízením přístupu (vč. čerstvosti ACL) a opravou stale vektorů před prvním nasazením** a s **testovací sadou a benchmarkem** jako podmínkou tvrzení o kvalitě.
 
 ---
 

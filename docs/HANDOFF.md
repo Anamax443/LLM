@@ -29,6 +29,7 @@
 11. **Lexikální hledání nativně v Qdrantu (dense + sparse vektory) — NE SQL FTS.** Důvod: **rychlost** (jeden systém, RRF fúze, žádná cross-DB latence). SQL zůstává na manifest/audit/živá data.
 12. **Embedding model se před produkcí benchmarkne** (nomic je anglicky-centrický → riziko pro češtinu; test multilingual-e5 / BGE-m3). Volba dle čísel, ne default.
 13. **Parsing musí umět OCR + tabulky** (scan PDF jinak neviditelné, XLSX ztrácí kontext). **Verzování dokumentů** (stará vs nová směrnice). **Reconciliation: mtime/size first, hash jen změněných** (I/O na SMB).
+15. **(v3) Čerstvost ACL — kritický nález 5. kola.** Změna NTFS oprávnění nemění mtime/velikost → reconciliation musí sledovat i security-descriptor (samostatný hash ACL); autorizace za běhu dle **plného tranzitivního členství** uživatele (vnořené AD skupiny, deny ACE, dědičnost), ne dle uloženého seznamu skupin. Jinak by uživatel s odebraným přístupem měl dokument přes asistenta dál. Odhady pracnosti navýšeny na realistické (MVP ~2–3 měsíce). Viz OPONENTURA v3.
 14. **Metriky bez testovací sady = jen cíle.** Sada ≥150 dotazů + evaluace vznikne před tvrzeními o kvalitě. „≈0 % halucinací" zrušeno → „< 2 %, měřeno". ISO/NIS2 přeformulováno (on-prem ≠ soulad; motivace = klasifikace dat). Text-to-SQL nad BC = samostatná fáze.
 
 ## 3. Známé bugy / dluhy (v současném kódu)
@@ -44,7 +45,7 @@
 
 Podrobně vč. odhadu pracnosti v [OPONENTURA.md](OPONENTURA.md) kap. 13.
 
-1. **Ověření jádra** — reconciliation cyklus na SMB (mtime/size), konektivita Linux → SQL19. *(pozn.: „test inotify" vypuštěn — rozhodnutí 3 už inotify opustilo.)*
+1. **Ověření jádra** — reconciliation cyklus na SMB (mtime/size **+ ACL/security-descriptor**), konektivita Linux → SQL19. *(pozn.: „test inotify" vypuštěn — rozhodnutí 3 už inotify opustilo.)*
 2. **Řízení přístupu (MVP)** — AD/Entra auth, indexace ACL u dokumentu, filtr výsledků dle identity. **Podmínka nasazení.**
 3. **Oprava stale vektorů + verzování dokumentů** — mazání bloků dle zdroje před upsertem, `on_deleted`, relativní cesta, Qdrant payload index. **Pre-MVP.**
 4. **Testovací sada + benchmark** embedding (nomic vs multilingual-e5 vs BGE-m3) a generativních modelů (vč. kvantizace, češtiny).
