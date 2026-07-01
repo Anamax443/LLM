@@ -31,6 +31,7 @@ You ask in natural language (e.g. *"how do I restore a server from backup?"*) �
 | `docs/BUILD.md` | **Build manual — build the whole system from scratch** ([EN](docs/BUILD.en.md)) |
 | `docs/HANDOFF.md` | Current project state and decisions |
 | `docs/OPONENTURA.md` | Defense material (decisions, risks, NFRs, capacity, DR, TCO) — Czech |
+| `docs/JAK-FUNGUJE-UCENI.md` | Non-technical explainer "how the model knows our data" ([EN](docs/JAK-FUNGUJE-UCENI.en.md)) |
 | `requirements.txt` | Python dependencies |
 
 ## Quick start

@@ -47,6 +47,7 @@ Zeptáte se přirozeným jazykem (např. *„jak obnovit server ze zálohy?"*) �
 | `docs/BUILD.md` | **Výrobní návod — postavení celého systému od nuly** |
 | `docs/HANDOFF.md` | Aktuální stav projektu a přijatá rozhodnutí |
 | `docs/OPONENTURA.md` | Obhajovací podklad (rozhodnutí, rizika, NFR, kapacita, DR, TCO) |
+| `docs/JAK-FUNGUJE-UCENI.md` | Netechnické vysvětlení „jak model umí naše data" (RAG vs fine-tuning) |
 | `requirements.txt` | Python závislosti |
 
 ## Rychlý start
