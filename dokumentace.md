@@ -19,3 +19,8 @@ Systém běží uvnitř Python virtual environment (`venv`).
 ## 4. Verzování a GitHub
 Projekt je spravován přes Git. 
 **DŮLEŽITÉ BEZPEČNOSTNÍ UPOZORNĚNÍ:** Složky `docs/` a `incoming/` jsou úmyslně ignorovány v `.gitignore`, aby nedošlo k úniku interních firemních dat (ISO27001). Po naklonování repozitáře na nový server je nutné tyto složky vytvořit ručně a nastavit jim správná oprávnění pro Sambu.
+
+## 5. Související dokumentace
+- **[README.md](README.md)** / [README.en.md](README.en.md) — přehled projektu.
+- **[docs/BUILD.md](docs/BUILD.md)** / [BUILD.en.md](docs/BUILD.en.md) — výrobní návod, postavení od nuly.
+- **[docs/HANDOFF.md](docs/HANDOFF.md)** — aktuální stav, přijatá rozhodnutí, známé bugy a další kroky (vč. přechodu na reconciliation ingest, SQL Server 2019 a hybridního hledání).

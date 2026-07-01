@@ -4,13 +4,18 @@ __pycache__/
 *.pyc
 .env
 
-# Data a firemní dokumenty (Kritické!)
-docs/
+# Firemní dokumenty a data (KRITICKÉ — nikdy do Gitu).
+# Pozn.: skutečné pracovní/datové adresáře jsou MIMO repo (/data/llm-demo/watchdog/...).
+# Ignorujeme podle typu souboru, aby se sem nedostaly firemní dokumenty.
 incoming/
+qdrant_storage/
 *.pdf
 *.docx
 *.xlsx
+
+# Textové firemní dokumenty — ale projektové .txt tracknout
 *.txt
+!requirements.txt
 
 # OS soubory
 .DS_Store

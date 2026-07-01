@@ -1,0 +1,27 @@
+# AXIMA Znalostní Asistent — Python závislosti
+# Instalace: pip install -r requirements.txt
+
+# --- Web API ---
+fastapi
+uvicorn[standard]
+pydantic
+
+# --- HTTP klient (Ollama) ---
+requests
+
+# --- Vektorová databáze ---
+qdrant-client>=1.11
+
+# --- Sledování souborů / ingest ---
+watchdog
+
+# --- Čtení dokumentů ---
+python-docx
+openpyxl
+pdfplumber
+
+# --- Chunkování textu ---
+langchain-text-splitters
+
+# --- SQL Server 2019 (roadmapa: manifest, audit, hybridní hledání) ---
+# pyodbc            # vyžaduje systémový "ODBC Driver 18 for SQL Server"

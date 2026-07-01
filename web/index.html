@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AXIMA Znalostní Asistent</title>
+<style>
+  /* ===== AXIMA UI standard — archetyp A (IT-ops konzole), accent modrá, bez CSS frameworku ===== */
+  :root {
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-soft: rgba(37, 99, 235, 0.12);
+    --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+    --radius: 10px;
+  }
+  /* Dark = default */
+  html[data-theme="dark"] {
+    --bg: #0f141b;
+    --panel: #171e28;
+    --panel-2: #1e2733;
+    --border: #2a3542;
+    --text: #e6edf3;
+    --text-dim: #8b98a8;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --err: #f85149;
+  }
+  html[data-theme="light"] {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --panel-2: #eef1f5;
+    --border: #d5dce4;
+    --text: #1b232c;
+    --text-dim: #5a6673;
+    --ok: #1a7f37;
+    --warn: #9a6700;
+    --err: #cf222e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: var(--font);
+    background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column; min-height: 100vh;
+    font-size: 14px; line-height: 1.5;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ===== Header ===== */
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 20px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .logo { font-size: 20px; }
+  .title { font-weight: 600; font-size: 16px; }
+  .subtitle { color: var(--text-dim); font-size: 12px; }
+  .header-spacer { flex: 1; }
+  .icon-btn {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px;
+  }
+  .icon-btn:hover { border-color: var(--accent); }
+
+  /* ===== Tabs ===== */
+  nav.tabs {
+    display: flex; gap: 4px; padding: 0 16px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  nav.tabs button {
+    background: none; border: none; color: var(--text-dim);
+    padding: 12px 16px; cursor: pointer; font-size: 14px; font-family: var(--font);
+    border-bottom: 2px solid transparent;
+  }
+  nav.tabs button:hover { color: var(--text); }
+  nav.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+  /* ===== Main ===== */
+  main { flex: 1; padding: 24px; max-width: 1080px; width: 100%; margin: 0 auto; }
+  .view { display: none; }
+  .view.active { display: block; }
+  h2 { font-size: 18px; margin: 0 0 4px; }
+  .lead { color: var(--text-dim); margin: 0 0 20px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; margin-bottom: 16px;
+  }
+  .card h3 { margin: 0 0 12px; font-size: 15px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    background: var(--accent); color: #fff; border: none;
+    border-radius: 8px; padding: 9px 16px; cursor: pointer; font-size: 14px; font-family: var(--font);
+  }
+  .btn:hover { background: var(--accent-hover); }
+  .btn.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+  .btn.secondary:hover { border-color: var(--accent); }
+  input[type=text], input[type=number], textarea, select {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 14px; font-family: var(--font); width: 100%;
+  }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+  label.field { display: block; margin-bottom: 12px; }
+  label.field span { display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 4px; }
+
+  /* ===== Assistant / chat ===== */
+  .chat-answer { white-space: pre-wrap; }
+  .sources { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .source-chip {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 20px;
+    padding: 5px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .ask-box { display: flex; gap: 8px; margin-top: 16px; }
+  .ask-box input { flex: 1; }
+  .hint { color: var(--text-dim); font-size: 12px; }
+
+  /* ===== Tables (paths, scope) ===== */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge.ok { background: rgba(63,185,80,.15); color: var(--ok); }
+  .badge.err { background: rgba(248,81,73,.15); color: var(--err); }
+  .badge.off { background: var(--panel-2); color: var(--text-dim); }
+  .toggle { cursor: pointer; }
+
+  /* ===== Manager / print ===== */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; }
+  .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .stat .n { font-size: 26px; font-weight: 700; color: var(--accent); }
+  .stat .l { color: var(--text-dim); font-size: 12px; }
+  .print-only { display: none; }
+
+  /* ===== Footer service line ===== */
+  footer {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 8px 20px; background: var(--panel); border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--text-dim);
+  }
+  footer .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  footer .dot.ok { background: var(--ok); } footer .dot.err { background: var(--err); }
+  footer code { color: var(--text); }
+  footer .spacer { flex: 1; }
+
+  /* ===== Print: vždy light ===== */
+  @media print {
+    header, nav.tabs, footer, .no-print, .ask-box { display: none !important; }
+    body { background: #fff; color: #000; }
+    main { max-width: none; padding: 0; }
+    .view { display: none !important; }
+    .view.print-target { display: block !important; }
+    .card { border: 1px solid #bbb; break-inside: avoid; }
+    .print-only { display: block; }
+    .stat .n { color: #000; }
+    a { color: #000; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">📚</span>
+  <div>
+    <div class="title" data-i18n="app.title">AXIMA Znalostní Asistent</div>
+    <div class="subtitle" data-i18n="app.subtitle">Lokální AI nad interní dokumentací — nic neopouští firmu</div>
+  </div>
+  <span class="header-spacer"></span>
+  <button class="icon-btn" id="langBtn" title="Přepnout jazyk / Switch language">CS</button>
+  <button class="icon-btn" id="themeBtn" title="Světlý / tmavý režim">🌙</button>
+</header>
+
+<nav class="tabs">
+  <button data-tab="asistent" class="active" data-i18n="tab.assistant">Asistent</button>
+  <button data-tab="nastaveni" data-i18n="tab.settings">Nastavení</button>
+  <button data-tab="dokumentace" data-i18n="tab.docs">Dokumentace</button>
+  <button data-tab="manazer" data-i18n="tab.manager">Manažerský výstup</button>
+</nav>
+
+<main>
+
+  <!-- ===== ASISTENT ===== -->
+  <section class="view active" id="view-asistent">
+    <h2 data-i18n="assistant.h">Zeptejte se na interní postupy</h2>
+    <p class="lead" data-i18n="assistant.lead">Směrnice, infrastruktura, IP adresy, postupy. Odpověď vždy s uvedením zdroje.</p>
+    <div class="card">
+      <div class="chat-answer" id="answer" data-i18n="assistant.placeholder">Zadejte dotaz níže. Asistent odpovídá výhradně na základě firemních dokumentů — pokud odpověď nezná, řekne to a nevymýšlí si.</div>
+      <div class="sources" id="sources"></div>
+    </div>
+    <div class="ask-box">
+      <input type="text" id="question" data-i18n-ph="assistant.ph" placeholder="Např. jak obnovit server ze zálohy?">
+      <button class="btn" id="askBtn" data-i18n="assistant.ask">Zeptat se</button>
+    </div>
+    <p class="hint" data-i18n="assistant.hint">Napojení na backend: POST /ask · při nedostupném backendu se zobrazí ukázková odpověď.</p>
+  </section>
+
+  <!-- ===== NASTAVENÍ ===== -->
+  <section class="view" id="view-nastaveni">
+    <h2 data-i18n="settings.h">Nastavení</h2>
+    <p class="lead" data-i18n="settings.lead">Cesty se dají spravovat zde — bez zásahu IT technika. Ukládá se do databáze, změny se promítnou při dalším skenu.</p>
+
+    <div class="card">
+      <h3 data-i18n="settings.paths">Hlídané cesty s dokumenty</h3>
+      <table id="pathsTable">
+        <thead>
+          <tr>
+            <th data-i18n="settings.col.path">Cesta</th>
+            <th data-i18n="settings.col.sub">Podadresáře</th>
+            <th data-i18n="settings.col.ext">Přípony</th>
+            <th data-i18n="settings.col.state">Stav</th>
+            <th data-i18n="settings.col.on">Aktivní</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="pathsBody"></tbody>
+      </table>
+      <div class="row" style="margin-top:14px;">
+        <button class="btn secondary" id="addPathBtn" data-i18n="settings.add">+ Přidat cestu</button>
+      </div>
+      <p class="hint" style="margin-top:10px;" data-i18n="settings.pathHint">Podporují se síťové cesty (UNC / mount) i podadresáře. Odebrání cesty smaže i její dokumenty z báze.</p>
+    </div>
+
+    <div class="card">
+      <h3 data-i18n="settings.model">Model a hledání</h3>
+      <div class="row">
+        <label class="field" style="flex:1; min-width:180px;">
+          <span data-i18n="settings.chatModel">Generativní model</span>
+          <input type="text" id="setModel" value="llama3.1">
+        </label>
+        <label class="field" style="flex:1; min-width:180px;">
+          <span data-i18n="settings.embModel">Embedding model</span>
+          <input type="text" id="setEmb" value="nomic-embed-text">
+        </label>
+        <label class="field" style="width:130px;">
+          <span data-i18n="settings.temp">Teplota</span>
+          <input type="number" id="setTemp" value="0.1" step="0.1" min="0" max="1">
+        </label>
+        <label class="field" style="width:130px;">
+          <span data-i18n="settings.limit">Bloků kontextu</span>
+          <input type="number" id="setLimit" value="6" min="1" max="20">
+        </label>
+      </div>
+      <button class="btn" id="saveSettings" data-i18n="settings.save">Uložit nastavení</button>
+      <p class="hint" style="margin-top:10px;" data-i18n="settings.saveHint">Runtime nastavení (model, teplota, cesty) se ukládá do SQL. Připojovací údaje zůstávají v .env.</p>
+    </div>
+  </section>
+
+  <!-- ===== DOKUMENTACE ===== -->
+  <section class="view" id="view-dokumentace">
+    <h2 data-i18n="docs.h">Dokumentace</h2>
+    <p class="lead" data-i18n="docs.lead">Rozcestník. Stránka je tisknutelná (ve světlém režimu).</p>
+    <div class="card">
+      <h3 data-i18n="docs.forUsers">Pro uživatele</h3>
+      <ul>
+        <li><a href="../README.md" data-i18n="docs.readme">README — co to je a jak to funguje</a></li>
+        <li><a href="#" data-tab-link="manazer" data-i18n="docs.mgr">Manažerský výstup — přehled a rozsah</a></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 data-i18n="docs.forAdmins">Pro administrátory</h3>
+      <ul>
+        <li><a href="../docs/BUILD.md" data-i18n="docs.build">BUILD.md — postavení celého systému od nuly</a></li>
+        <li><a href="../dokumentace.md" data-i18n="docs.tech">Technická dokumentace — architektura, provoz, known issues</a></li>
+        <li><a href="../docs/HANDOFF.md" data-i18n="docs.handoff">HANDOFF.md — aktuální stav a rozhodnutí</a></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ===== MANAŽERSKÝ VÝSTUP ===== -->
+  <section class="view" id="view-manazer">
+    <div class="no-print" style="margin-bottom:16px;">
+      <h2 data-i18n="mgr.h">Manažerský výstup</h2>
+      <p class="lead" data-i18n="mgr.lead">Netechnický přehled a tisknutelný rozsah znalostní báze.</p>
+      <button class="btn" id="printBtn" data-i18n="mgr.print">🖨 Vytisknout přehled rozsahu</button>
+    </div>
+
+    <div class="print-only" style="margin-bottom:12px;">
+      <strong data-i18n="app.title">AXIMA Znalostní Asistent</strong> — <span data-i18n="mgr.scopeTitle">Rozsah znalostní báze</span>
+    </div>
+
+    <div class="card">
+      <h3 data-i18n="mgr.what">O co jde</h3>
+      <p data-i18n="mgr.whatText">Interní AI asistent, který odpovídá na dotazy zaměstnanců na základě firemní dokumentace. Veškerá data zůstávají na lokálním serveru — nic se neodesílá do cloudu (ISO 27001 / NIS2). U každé odpovědi uvádí zdroj.</p>
+    </div>
+
+    <div class="card">
+      <h3 data-i18n="mgr.numbers">Souhrn</h3>
+      <div class="stat-grid">
+        <div class="stat"><div class="n" id="stDocs">128</div><div class="l" data-i18n="mgr.docs">dokumentů v bázi</div></div>
+        <div class="stat"><div class="n" id="stChunks">2 940</div><div class="l" data-i18n="mgr.chunks">textových bloků</div></div>
+        <div class="stat"><div class="n" id="stPaths">4</div><div class="l" data-i18n="mgr.areas">sledované oblasti</div></div>
+        <div class="stat"><div class="n" id="stUpdated">1. 7. 2026</div><div class="l" data-i18n="mgr.lastScan">poslední aktualizace</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 data-i18n="mgr.scope">Na jakou oblast dokumentů se asistent vztahuje</h3>
+      <table id="scopeTable">
+        <thead>
+          <tr>
+            <th data-i18n="mgr.col.area">Oblast / cesta</th>
+            <th data-i18n="mgr.col.cat">Kategorie</th>
+            <th class="num" data-i18n="mgr.col.count">Dokumentů</th>
+            <th data-i18n="mgr.col.updated">Aktualizováno</th>
+          </tr>
+        </thead>
+        <tbody id="scopeBody"></tbody>
+      </table>
+      <p class="hint" style="margin-top:10px;" data-i18n="mgr.scopeHint">Zobrazená čísla jsou vzorová — po napojení na backend se načítají živě z databáze (GET /api/scope).</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <span><span class="dot" id="healthDot"></span><span id="healthText" data-i18n="footer.checking">Zjišťuji stav…</span></span>
+  <span data-i18n="footer.commit">Verze:</span> <code id="commit">—</code>
+  <span class="spacer"></span>
+  <span id="clock">—</span>
+</footer>
+
+<script>
+/* ================= i18n ================= */
+const I18N = {
+  cs: {
+    "app.title":"AXIMA Znalostní Asistent","app.subtitle":"Lokální AI nad interní dokumentací — nic neopouští firmu",
+    "tab.assistant":"Asistent","tab.settings":"Nastavení","tab.docs":"Dokumentace","tab.manager":"Manažerský výstup",
+    "assistant.h":"Zeptejte se na interní postupy","assistant.lead":"Směrnice, infrastruktura, IP adresy, postupy. Odpověď vždy s uvedením zdroje.",
+    "assistant.placeholder":"Zadejte dotaz níže. Asistent odpovídá výhradně na základě firemních dokumentů — pokud odpověď nezná, řekne to a nevymýšlí si.",
+    "assistant.ph":"Např. jak obnovit server ze zálohy?","assistant.ask":"Zeptat se",
+    "assistant.hint":"Napojení na backend: POST /ask · při nedostupném backendu se zobrazí ukázková odpověď.",
+    "assistant.thinking":"AI generuje odpověď…",
+    "settings.h":"Nastavení","settings.lead":"Cesty se dají spravovat zde — bez zásahu IT technika. Ukládá se do databáze, změny se promítnou při dalším skenu.",
+    "settings.paths":"Hlídané cesty s dokumenty","settings.col.path":"Cesta","settings.col.sub":"Podadresáře","settings.col.ext":"Přípony","settings.col.state":"Stav","settings.col.on":"Aktivní",
+    "settings.add":"+ Přidat cestu","settings.pathHint":"Podporují se síťové cesty (UNC / mount) i podadresáře. Odebrání cesty smaže i její dokumenty z báze.",
+    "settings.model":"Model a hledání","settings.chatModel":"Generativní model","settings.embModel":"Embedding model","settings.temp":"Teplota","settings.limit":"Bloků kontextu",
+    "settings.save":"Uložit nastavení","settings.saveHint":"Runtime nastavení (model, teplota, cesty) se ukládá do SQL. Připojovací údaje zůstávají v .env.",
+    "docs.h":"Dokumentace","docs.lead":"Rozcestník. Stránka je tisknutelná (ve světlém režimu).","docs.forUsers":"Pro uživatele","docs.forAdmins":"Pro administrátory",
+    "docs.readme":"README — co to je a jak to funguje","docs.mgr":"Manažerský výstup — přehled a rozsah","docs.build":"BUILD.md — postavení celého systému od nuly",
+    "docs.tech":"Technická dokumentace — architektura, provoz, known issues","docs.handoff":"HANDOFF.md — aktuální stav a rozhodnutí",
+    "mgr.h":"Manažerský výstup","mgr.lead":"Netechnický přehled a tisknutelný rozsah znalostní báze.","mgr.print":"🖨 Vytisknout přehled rozsahu",
+    "mgr.scopeTitle":"Rozsah znalostní báze","mgr.what":"O co jde",
+    "mgr.whatText":"Interní AI asistent, který odpovídá na dotazy zaměstnanců na základě firemní dokumentace. Veškerá data zůstávají na lokálním serveru — nic se neodesílá do cloudu (ISO 27001 / NIS2). U každé odpovědi uvádí zdroj.",
+    "mgr.numbers":"Souhrn","mgr.docs":"dokumentů v bázi","mgr.chunks":"textových bloků","mgr.areas":"sledované oblasti","mgr.lastScan":"poslední aktualizace",
+    "mgr.scope":"Na jakou oblast dokumentů se asistent vztahuje","mgr.col.area":"Oblast / cesta","mgr.col.cat":"Kategorie","mgr.col.count":"Dokumentů","mgr.col.updated":"Aktualizováno",
+    "mgr.scopeHint":"Zobrazená čísla jsou vzorová — po napojení na backend se načítají živě z databáze (GET /api/scope).",
+    "footer.checking":"Zjišťuji stav…","footer.commit":"Verze:","footer.ok":"Backend běží","footer.err":"Backend nedostupný (ukázkový režim)"
+  },
+  en: {
+    "app.title":"AXIMA Knowledge Assistant","app.subtitle":"Local AI over internal documentation — nothing leaves the company",
+    "tab.assistant":"Assistant","tab.settings":"Settings","tab.docs":"Documentation","tab.manager":"Management report",
+    "assistant.h":"Ask about internal procedures","assistant.lead":"Policies, infrastructure, IP addresses, procedures. Every answer cites its source.",
+    "assistant.placeholder":"Type a question below. The assistant answers strictly from company documents — if it doesn't know, it says so and never makes things up.",
+    "assistant.ph":"E.g. how do I restore a server from backup?","assistant.ask":"Ask",
+    "assistant.hint":"Backend: POST /ask · a sample answer is shown when the backend is unavailable.",
+    "assistant.thinking":"AI is generating an answer…",
+    "settings.h":"Settings","settings.lead":"Paths can be managed here — no IT technician needed. Stored in the database, applied on the next scan.",
+    "settings.paths":"Watched document paths","settings.col.path":"Path","settings.col.sub":"Subfolders","settings.col.ext":"Extensions","settings.col.state":"State","settings.col.on":"Active",
+    "settings.add":"+ Add path","settings.pathHint":"Network paths (UNC / mount) and subfolders are supported. Removing a path also deletes its documents from the base.",
+    "settings.model":"Model & search","settings.chatModel":"Generative model","settings.embModel":"Embedding model","settings.temp":"Temperature","settings.limit":"Context blocks",
+    "settings.save":"Save settings","settings.saveHint":"Runtime settings (model, temperature, paths) are stored in SQL. Connection credentials stay in .env.",
+    "docs.h":"Documentation","docs.lead":"Directory. This page is printable (in light mode).","docs.forUsers":"For users","docs.forAdmins":"For administrators",
+    "docs.readme":"README — what it is and how it works","docs.mgr":"Management report — overview & scope","docs.build":"BUILD.md — build the whole system from scratch",
+    "docs.tech":"Technical documentation — architecture, operations, known issues","docs.handoff":"HANDOFF.md — current state & decisions",
+    "mgr.h":"Management report","mgr.lead":"Non-technical overview and printable knowledge-base scope.","mgr.print":"🖨 Print scope overview",
+    "mgr.scopeTitle":"Knowledge base scope","mgr.what":"What it is",
+    "mgr.whatText":"An internal AI assistant that answers employee questions from company documentation. All data stays on the local server — nothing is sent to the cloud (ISO 27001 / NIS2). Every answer cites its source.",
+    "mgr.numbers":"Summary","mgr.docs":"documents in base","mgr.chunks":"text blocks","mgr.areas":"watched areas","mgr.lastScan":"last update",
+    "mgr.scope":"Which document areas the assistant covers","mgr.col.area":"Area / path","mgr.col.cat":"Category","mgr.col.count":"Documents","mgr.col.updated":"Updated",
+    "mgr.scopeHint":"Numbers shown are samples — once wired to the backend they load live from the database (GET /api/scope).",
+    "footer.checking":"Checking status…","footer.commit":"Version:","footer.ok":"Backend online","footer.err":"Backend unavailable (sample mode)"
+  }
+};
+let lang = localStorage.getItem("axima.lang") || "cs";
+function t(k){ return (I18N[lang] && I18N[lang][k]) || (I18N.cs[k]) || k; }
+function applyLang(){
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => el.placeholder = t(el.dataset.i18nPh));
+  document.getElementById("langBtn").textContent = lang === "cs" ? "CS" : "EN";
+  renderPaths(); renderScope(); refreshHealthText();
+}
+document.getElementById("langBtn").onclick = () => {
+  lang = lang === "cs" ? "en" : "cs"; localStorage.setItem("axima.lang", lang); applyLang();
+};
+
+/* ================= Theme ================= */
+let theme = localStorage.getItem("axima.theme") || "dark";
+function applyTheme(){
+  document.documentElement.dataset.theme = theme;
+  document.getElementById("themeBtn").textContent = theme === "dark" ? "🌙" : "☀️";
+}
+document.getElementById("themeBtn").onclick = () => {
+  theme = theme === "dark" ? "light" : "dark"; localStorage.setItem("axima.theme", theme); applyTheme();
+};
+
+/* ================= Tabs ================= */
+function showTab(name){
+  document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === "view-"+name));
+}
+document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+document.querySelectorAll("[data-tab-link]").forEach(a => a.onclick = (e) => { e.preventDefault(); showTab(a.dataset.tabLink); });
+
+/* ================= Settings: paths (sample data) ================= */
+let paths = [
+  { path: "\\\\fileserver\\Smernice", sub: true,  ext: "docx,pdf", ok: true,  on: true },
+  { path: "\\\\fileserver\\IT\\Postupy", sub: true, ext: "docx,md", ok: true, on: true },
+  { path: "\\\\fileserver\\Infrastruktura", sub: true, ext: "xlsx,pdf", ok: false, on: true },
+  { path: "\\\\nas02\\Provoz\\Zalohy", sub: false, ext: "pdf", ok: true, on: false }
+];
+function renderPaths(){
+  const b = document.getElementById("pathsBody"); b.innerHTML = "";
+  paths.forEach((p, i) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><code>${p.path}</code></td>
+      <td>${p.sub ? "✓" : "—"}</td>
+      <td>${p.ext}</td>
+      <td>${p.ok ? '<span class="badge ok">'+(lang==="cs"?"dostupná":"reachable")+'</span>' : '<span class="badge err">'+(lang==="cs"?"nedostupná":"down")+'</span>'}</td>
+      <td><span class="toggle" data-i="${i}">${p.on ? '<span class="badge ok">'+(lang==="cs"?"ano":"on")+'</span>' : '<span class="badge off">'+(lang==="cs"?"ne":"off")+'</span>'}</span></td>
+      <td><button class="btn secondary" data-rm="${i}" style="padding:4px 10px;">✕</button></td>`;
+    b.appendChild(tr);
+  });
+  b.querySelectorAll("[data-i]").forEach(el => el.onclick = () => { paths[el.dataset.i].on = !paths[el.dataset.i].on; renderPaths(); });
+  b.querySelectorAll("[data-rm]").forEach(el => el.onclick = () => {
+    const msg = lang==="cs" ? "Odebrat cestu? Její dokumenty se smažou i ze znalostní báze." : "Remove path? Its documents will also be deleted from the knowledge base.";
+    if (confirm(msg)) { paths.splice(el.dataset.rm,1); renderPaths(); }
+  });
+}
+document.getElementById("addPathBtn").onclick = () => {
+  const p = prompt(lang==="cs" ? "Zadejte cestu (UNC nebo mount):" : "Enter path (UNC or mount):", "\\\\fileserver\\");
+  if (p) { paths.push({ path:p, sub:true, ext:"docx,pdf,xlsx", ok:true, on:true }); renderPaths(); }
+};
+document.getElementById("saveSettings").onclick = () => {
+  alert(lang==="cs" ? "Uloženo (ukázka). Po napojení na backend se pošle na POST /api/settings." : "Saved (sample). Once wired, this POSTs to /api/settings.");
+};
+
+/* ================= Manager: scope (sample data) ================= */
+const scope = [
+  { area:"\\\\fileserver\\Smernice", cat:{cs:"Směrnice a politiky",en:"Policies"}, n:42, up:"28. 6. 2026" },
+  { area:"\\\\fileserver\\IT\\Postupy", cat:{cs:"IT postupy",en:"IT procedures"}, n:57, up:"1. 7. 2026" },
+  { area:"\\\\fileserver\\Infrastruktura", cat:{cs:"Infrastruktura, IP plán",en:"Infrastructure, IP plan"}, n:19, up:"20. 6. 2026" },
+  { area:"\\\\nas02\\Provoz\\Zalohy", cat:{cs:"Zálohování",en:"Backups"}, n:10, up:"15. 6. 2026" }
+];
+function renderScope(){
+  const b = document.getElementById("scopeBody"); b.innerHTML = "";
+  scope.forEach(s => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><code>${s.area}</code></td><td>${s.cat[lang]||s.cat.cs}</td><td class="num">${s.n}</td><td>${s.up}</td>`;
+    b.appendChild(tr);
+  });
+}
+document.getElementById("printBtn").onclick = () => {
+  const wasLight = theme === "light";
+  if (!wasLight) { document.documentElement.dataset.theme = "light"; }   // tisk = vždy light
+  document.getElementById("view-manazer").classList.add("print-target");
+  window.print();
+  document.getElementById("view-manazer").classList.remove("print-target");
+  if (!wasLight) { document.documentElement.dataset.theme = theme; }
+};
+
+/* ================= Assistant (POST /ask, graceful fallback) ================= */
+async function ask(){
+  const q = document.getElementById("question").value.trim();
+  if (!q) return;
+  const ans = document.getElementById("answer"), src = document.getElementById("sources");
+  ans.textContent = t("assistant.thinking"); src.innerHTML = "";
+  try {
+    const r = await fetch("/ask", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:q}) });
+    if (!r.ok) throw new Error("backend");
+    const d = await r.json();
+    ans.textContent = d.answer || "—";
+    (d.sources||[]).forEach(s => { const c=document.createElement("span"); c.className="source-chip"; c.textContent="📄 "+s; src.appendChild(c); });
+  } catch (e) {
+    ans.textContent = (lang==="cs"
+      ? "[Ukázkový režim] Backend zatím neběží. Po spuštění FastAPI (POST /ask) se sem vypíše reálná odpověď s citovanými zdroji.\n\nPříklad: „Postup obnovy serveru — 1) najděte server v Veeam a klikněte pravým… 2) zvolte zálohu a potvrďte OK…“"
+      : "[Sample mode] Backend not running yet. Once FastAPI is up (POST /ask), the real answer with cited sources appears here.");
+    ["Obnovení serveru ze zálohy.docx","Nastavení authenticatoru.docx"].forEach(s => { const c=document.createElement("span"); c.className="source-chip"; c.textContent="📄 "+s; src.appendChild(c); });
+  }
+}
+document.getElementById("askBtn").onclick = ask;
+document.getElementById("question").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
+
+/* ================= Footer: /api/version + health + hodiny ================= */
+function refreshHealthText(){
+  const el = document.getElementById("healthText");
+  if (el.dataset.state === "ok") el.textContent = t("footer.ok");
+  else if (el.dataset.state === "err") el.textContent = t("footer.err");
+  else el.textContent = t("footer.checking");
+}
+async function loadVersion(){
+  const dot = document.getElementById("healthDot"), txt = document.getElementById("healthText");
+  try {
+    const r = await fetch("/api/version"); if (!r.ok) throw new Error();
+    const d = await r.json();
+    document.getElementById("commit").textContent = (d.commit || "?").slice(0,7) + (d.branch ? " ("+d.branch+")" : "");
+    dot.className = "dot ok"; txt.dataset.state = "ok";
+  } catch (e) {
+    document.getElementById("commit").textContent = "dev";
+    dot.className = "dot err"; txt.dataset.state = "err";
+  }
+  refreshHealthText();
+}
+function tick(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,"0");
+  document.getElementById("clock").textContent = `${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+/* ================= Init ================= */
+applyTheme(); applyLang(); loadVersion(); tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>
