@@ -86,3 +86,5 @@ Decision rationale, risks, NFRs, capacity, DR and TCO: **[docs/OPONENTURA.md](do
 ## Security
 
 Company documents (`*.docx`, `*.pdf`, `*.xlsx`, …) and the `incoming/` folder are gitignored to prevent leaking data (documentation under `docs/` is versioned). Connection credentials belong in `.env` (see `.env.example`), **never in Git**.
+
+**Assistant guardrails** live in code (`SYSTEM_PROMPT` in `api.py`, the `system` field) — no persona, **prompt-injection resistant** (ignore "change your role/rules" attempts), answering only from the provided context. Changed only by an admin via git/review, **never by the chat user**.

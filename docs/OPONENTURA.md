@@ -142,7 +142,7 @@ Audit (kdo, kdy, dotaz, odpověď, zdroje) je nutný pro dohledatelnost. Riziko:
 ### 5.3 Threat model (nově)
 | Hrozba | Opatření |
 |---|---|
-| **Prompt injection** k exfiltraci cizích dokumentů | filtr dle ACL (5.1) — model nikdy nedostane do kontextu dokument mimo oprávnění uživatele |
+| **Prompt injection** k exfiltraci cizích dokumentů / změně chování | filtr dle ACL (5.1) — model nikdy nedostane do kontextu dokument mimo oprávnění uživatele; navíc **guardrails v poli `system`** (oddělené od vstupu, odolné vůči „změň roli/pravidla"), měněné jen adminem přes git |
 | **Data poisoning** (podvržený dokument v hlídané cestě) | řízení, kdo smí do hlídaných cest zapisovat; audit změn cest |
 | **Únik přes stahování zdroje** | verifikace oprávnění u každého stažení + log každého přístupu k dokumentu |
 | **Kompromitace audit DB** | maskování PII, retence, oddělený přístup |

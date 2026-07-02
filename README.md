@@ -102,3 +102,5 @@ Obhajoba rozhodnutí, rizika, NFR, kapacita, DR a TCO: **[docs/OPONENTURA.md](do
 ## Bezpečnost
 
 Firemní dokumenty (`*.docx`, `*.pdf`, `*.xlsx`, …) a složka `incoming/` jsou v `.gitignore`, aby nedošlo k úniku dat (dokumentace v `docs/` se naopak verzuje). Připojovací údaje patří do `.env` (viz `.env.example`), **nikdy ne do Gitu**.
+
+**Guardrails asistenta** jsou v kódu (`SYSTEM_PROMPT` v `api.py`, pole `system`) — bez persony, **odolné vůči prompt injection** (ignorují pokusy „změň roli/pravidla"), odpovídají jen z dodaného kontextu. Mění je jen admin přes git/review, **nikdy uživatel v chatu**.
