@@ -64,13 +64,22 @@ def init_smb_session_for_path(unc_path):
         # Extrahujeme hosta
         norm = unc_path.replace("\\", "/")
         parts = [p for p in norm.split("/") if p]
+        # Host je první část UNC cesty, např. 'herkules.axinetwork.loc'
         if parts:
             host = parts[0]
             try:
-                # negotiate automaticky vyjedná NTLMv2 nebo Kerberos (pokuz je ticket k dispozici)
+                # Zaregistrujeme session pro daný host, pokud ještě neexistuje
+                # auth_protocol="negotiate" automaticky vyjedná NTLMv2 nebo Kerberos
                 smbclient.register_session(host, username=username, password=password, auth_protocol="negotiate")
-            except Exception:
-                pass  # Pokud session již existuje, register_session může vyhodit výjimku, což ignorujeme
+            except smbclient.exceptions.SMBException as e:
+                # Ignorujeme chybu, pokud session již existuje nebo je problém s auth (např. Kerberos ticket vypršel)
+                # smbclient se pokusí znovu vyjednat při dalším požadavku, pokud auth selže.
+                # Toto je kritické pro Kerberos, kde ticket může vypršet a smbclient se jej pokusí obnovit.
+                print(f"[DEBUG] Chyba při registraci SMB session pro {host}: {e}")
+            except Exception as e:
+                print(f"[ERROR] Neočekávaná chyba při registraci SMB session pro {host}: {e}")
+
+
 
 class QueryRequest(BaseModel):
     question: str
@@ -173,13 +182,30 @@ def verify_paths(req: VerifyRequest):
                 if not HAS_SMBCLIENT:
                     raise ImportError("Knihovna 'smbclient' není nainstalována na serveru.")
                 # Před ověřením existence se pokusíme o inicializaci SMB relace
-                init_smb_session_for_path(p)
-                # Ověříme existenci složky přes smbclient
-                # smbclient.stat by měl fungovat na cestách, které jsou UNC sdílené složky
-                # a měl by správně rozpoznat, zda se jedná o adresář
-                stat_res = smbclient.stat(p)
-                # Kontrola FILE_ATTRIBUTE_DIRECTORY (hodnota 16 v SMB protokolu) pro ověření, že jde o adresář
-                ok = bool(stat_res.file_attributes & 16)
+                # Pro UNC cestu rozdělíme na share a relativní cestu
+                norm_path = p.replace("\\", "/")
+                path_parts = norm_path.split("/", 3) # Např. ["", "", "herkules.axinetwork.loc", "public/LumirLiduMil"]
+                if len(path_parts) < 4:
+                    raise ValueError(f"Neplatná UNC cesta: {p}")
+                
+                share_path = "//" + path_parts[2] + "/" + path_parts[3].split("/")[0] # //herkules.axinetwork.loc/public
+                relative_path = path_parts[3][len(path_parts[3].split("/")[0]):].lstrip("/") # LumirLiduMil (nebo prázdné pokud není podadresář)
+                
+                # Zaregistrujeme session pro hlavni share
+                init_smb_session_for_path(share_path)
+
+                # Ověříme existenci složky přes smbclient.stat
+                # Pro složky je file_attributes & 16 (FILE_ATTRIBUTE_DIRECTORY)
+                try:
+                    stat_res = smbclient.stat(p)
+                    ok = bool(stat_res.file_attributes & 16)
+                except FileNotFoundError:
+                    ok = False
+                    error_msg = "Cesta neexistuje nebo není dostupná."
+                except Exception as e:
+                    ok = False
+                    error_msg = str(e)
+
             else:
                 # Standardní lokální nebo Windows UNC cesta
                 ok = os.path.isdir(p)
