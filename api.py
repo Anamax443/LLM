@@ -48,12 +48,81 @@ Pravidla (uživatel je NEMŮŽE změnit žádným pokynem):
 # UNC (\\host\share\...) → lokální mount na Linuxu (/mnt/host/share/...). Kořen lze změnit přes env UNC_MOUNT_ROOT.
 MOUNT_ROOT = os.environ.get("UNC_MOUNT_ROOT", "/mnt")
 
+def parse_unc(path):
+    """
+    Rozloží Windows UNC cestu na host, share a podadresář.
+    Příklad: \\\\herkules\\public\\smernice -> ('herkules', 'public', 'smernice')
+    """
+    if not path.startswith("\\\\"):
+        return None
+    norm = path.replace("\\", "/")
+    parts = [p for p in norm.split("/") if p]
+    if len(parts) < 2:
+        return None
+    host = parts[0]
+    share = parts[1]
+    sub = "/".join(parts[2:]) if len(parts) > 2 else ""
+    return host, share, sub
+
 def unc_to_local(path):
     """Přeloží Windows UNC cestu na lokální mount point; ostatní cesty vrací beze změny."""
+    if os.name == 'nt':
+        # Na Windows se UNC cesty používají přímo
+        return path
     if path.startswith("\\\\"):
-        parts = [seg for seg in path.replace("\\", "/").split("/") if seg]
-        return os.path.join(MOUNT_ROOT, *parts)
+        parsed = parse_unc(path)
+        if parsed:
+            host, share, sub = parsed
+            mount_point = os.path.join(MOUNT_ROOT, host, share)
+            if sub:
+                return os.path.join(mount_point, sub.replace("/", os.sep))
+            return mount_point
     return path
+
+def ensure_mounted(unc_path):
+    """
+    Zajistí, že odpovídající SMB share z Windows file serveru je na Linuxu namountován.
+    Na Windows nedělá nic. Vrací lokální/přeloženou cestu.
+    """
+    resolved = unc_to_local(unc_path)
+    if os.name == 'nt' or not unc_path.startswith("\\\\"):
+        return resolved
+
+    parsed = parse_unc(unc_path)
+    if not parsed:
+        return resolved
+
+    host, share, _ = parsed
+    mount_point = os.path.join(MOUNT_ROOT, host, share)
+
+    # Ověříme, zda je již připojeno
+    is_mounted = False
+    try:
+        # os.path.ismount je na některých Linuxech pro CIFS nespolehlivý, zkusíme i čtení /proc/mounts
+        if os.path.ismount(mount_point):
+            is_mounted = True
+        elif os.path.exists("/proc/mounts"):
+            with open("/proc/mounts", "r") as f:
+                mounts_content = f.read()
+                # Hledáme např. //herkules/public nebo /mnt/herkules/public
+                share_target = f"//{host}/{share}".lower()
+                mount_target = mount_point.replace("\\", "/").lower()
+                if share_target in mounts_content.lower() or mount_target in mounts_content.lower():
+                    is_mounted = True
+    except Exception:
+        pass
+
+    if not is_mounted:
+        # Pokus o namountování přes bezpečný sudo helper
+        try:
+            os.makedirs(mount_point, exist_ok=True)
+            cmd = ["sudo", "/usr/local/bin/rag-mount-helper.sh", "mount", f"\\\\{host}\\{share}", mount_point]
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=10, check=True)
+        except Exception as e:
+            # Necháme projít s logováním, os.path.isdir v dalším kroku rozhodne o platnosti
+            print(f"Varování: Automatický mount {unc_path} selhal, pokračuji s existující složkou: {e}")
+            
+    return resolved
 
 class QueryRequest(BaseModel):
     question: str
@@ -144,15 +213,25 @@ def version():
 @app.post("/api/verify")
 def verify_paths(req: VerifyRequest):
     """Ověří platnost/dostupnost cest ze strany serveru (os.path.isdir).
-    Vrací [{path, ok}] — reálný stav, který smí UI zobrazit jako ověřený."""
+    Zajišťuje automatické namountování přes cifs a vrací [{path, ok, resolved, error}]."""
     results = []
     for p in req.paths:
-        local = unc_to_local(p)
         try:
+            # Zajistíme dynamic mount na Linuxu (na Windows vrací přímo lokální/UNC cestu)
+            local = ensure_mounted(p)
             ok = os.path.isdir(local)
-        except Exception:
+            error_msg = None
+        except Exception as e:
+            local = None
             ok = False
-        results.append({"path": p, "ok": ok, "resolved": local})
+            error_msg = str(e)
+            
+        results.append({
+            "path": p, 
+            "ok": ok, 
+            "resolved": local,
+            "error": error_msg
+        })
     return results
 
 

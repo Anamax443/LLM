@@ -2,7 +2,7 @@
 
 **Projekt:** Lokální AI asistent (RAG) nad interní firemní dokumentací
 **Repozitář:** Axima-Git/LLM · **Stav:** funkční prototyp + UI, roadmapa do produkce
-**Verze podkladu:** 3.0 (2026-07-01) — po pátém kole nezávislých oponentur
+**Verze podkladu:** 3.1 (2026-07-02) — po implementaci Dynamic File Server Mount řešení
 
 > Účel: poskytnout hodnoticí komisi úplný technický i manažerský obraz projektu, obhájit rozhodnutí, otevřeně pojmenovat rizika a omezení a předjímat kritické otázky. Verze 2.0 reaguje na nezávislé posudky — opravuje přehnaná tvrzení, přeřazuje priority a doplňuje dosud chybějící kapitoly. Sekce, u kterých s posudky nesouhlasím, jsou uvedeny v kap. 14.
 
@@ -62,7 +62,8 @@ Model **pracuje s našimi soubory a informacemi v nich** (přes RAG — dokument
 ## 3. Architektura řešení
 
 ```
-Síťové cesty (\\fileserver\...)                Uživatel (autentizovaný)
+Síťové cesty (dynamicky mountované z web UI)
+(\\fileserver\...)                Uživatel (autentizovaný)
         │  (reconciliation: mtime/size → hash jen změněných)
         ▼                                          │ dotaz + identita
   Ingest (watchdog_service)                        ▼

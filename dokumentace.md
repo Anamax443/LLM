@@ -25,4 +25,5 @@ Projekt je spravován přes Git.
 - **[docs/BUILD.md](docs/BUILD.md)** / [BUILD.en.md](docs/BUILD.en.md) — výrobní návod, postavení od nuly.
 - **[docs/HANDOFF.md](docs/HANDOFF.md)** — aktuální stav, přijatá rozhodnutí, známé bugy a další kroky (vč. přechodu na reconciliation ingest, SQL Server 2019 a hybridního hledání).
 - **[docs/OPONENTURA.md](docs/OPONENTURA.md)** — obhajovací podklad: rozhodnutí + alternativy, rizika, NFR, kapacitní plán, DR, threat model, TCO a reakce na oponenturu.
-- **[docs/JAK-FUNGUJE-UCENI.md](docs/JAK-FUNGUJE-UCENI.md)** / [EN](docs/JAK-FUNGUJE-UCENI.en.md) — netechnické vysvětlení, jak se model „učí" na našich datech (RAG, plnění báze, dotaz, feedback).
+- **[docs/JAK-FUNGUJE-UCENI.md](docs/JAK-FUNGUJE-UCENI.md)** / [EN](docs/JAK-FUNGUJE-UCENI.en.md) — netechnické vysvětlení, jak se model „učí" on-premise.
+- **[docs/SPOJENI_FILE_SERVERU.md](docs/SPOJENI_FILE_SERVERU.md)** — architektonický návrh propojení Windows File Serveru a Linuxu s dynamickým mountováním z web UI.
