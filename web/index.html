@@ -407,6 +407,7 @@
               <li>Uveďte kontext, pokud ho znáte (název systému, pobočka, program).</li>
               <li>U odpovědi vždy najdete <strong>zdrojové dokumenty</strong> — ověřte si podle nich detaily.</li>
               <li>Když asistent řekne <strong>„nevím"</strong>, znamená to, že informace není v dokumentech — raději než by si vymýšlel.</li>
+              <li>K dotazu můžete <strong>přiložit soubor nebo vložit screenshot (Ctrl+V)</strong> přes tlačítko 📎 — asistent z něj přečte text (u obrázků přes OCR) a vezme ho v úvahu.</li>
             </ul>
             <p class="hint">Odpovědi vycházejí z aktuální dokumentace. Za rozhodnutí učiněná na jejich základě odpovídá uživatel.</p>
           </div>
@@ -417,6 +418,7 @@
               <li>Add context if you know it (system name, branch, program).</li>
               <li>Every answer lists its <strong>source documents</strong> — verify details against them.</li>
               <li>When the assistant says <strong>"I don't know"</strong>, the information isn't in the documents — rather than inventing it.</li>
+              <li>You can <strong>attach a file or paste a screenshot (Ctrl+V)</strong> via the 📎 button — the assistant reads its text (OCR for images) and takes it into account.</li>
             </ul>
             <p class="hint">Answers are based on current documentation. The user is responsible for decisions made on their basis.</p>
           </div>
@@ -539,7 +541,7 @@ const I18N = {
     "docs.tech":"Technická dokumentace — architektura, provoz, known issues","docs.handoff":"HANDOFF.md — aktuální stav a rozhodnutí",
     "mgr.h":"Manažerský výstup","mgr.lead":"Netechnický přehled a tisknutelný rozsah znalostní báze.","mgr.print":"🖨 Vytisknout přehled rozsahu",
     "mgr.scopeTitle":"Rozsah znalostní báze","mgr.what":"O co jde",
-    "mgr.whatText":"Interní AI asistent, který odpovídá na dotazy zaměstnanců na základě firemní dokumentace. Veškerá data zůstávají na lokálním serveru — nic se neodesílá do cloudu (ISO 27001 / NIS2). U každé odpovědi uvádí zdroj.",
+    "mgr.whatText":"Interní AI asistent, který odpovídá na dotazy zaměstnanců na základě firemní dokumentace. Veškerá data zůstávají na lokálním serveru — nic se neodesílá do cloudu (ISO 27001 / NIS2). U každé odpovědi uvádí zdroj. Podporuje streamované odpovědi, přílohy k dotazu (dokumenty i screenshoty přes OCR) a jazyky CS/EN.",
     "mgr.numbers":"Souhrn","mgr.docs":"dokumentů v bázi","mgr.chunks":"textových bloků","mgr.areas":"sledované oblasti","mgr.lastScan":"poslední aktualizace",
     "mgr.scope":"Na jakou oblast dokumentů se asistent vztahuje","mgr.col.area":"Oblast / cesta","mgr.col.cat":"Kategorie","mgr.col.count":"Dokumentů","mgr.col.updated":"Aktualizováno",
     "mgr.scopeHint":"Zobrazená čísla jsou vzorová — po napojení na backend se načítají živě z databáze (GET /api/scope).",
@@ -564,7 +566,7 @@ const I18N = {
     "docs.tech":"Technical documentation — architecture, operations, known issues","docs.handoff":"HANDOFF.md — current state & decisions",
     "mgr.h":"Management report","mgr.lead":"Non-technical overview and printable knowledge-base scope.","mgr.print":"🖨 Print scope overview",
     "mgr.scopeTitle":"Knowledge base scope","mgr.what":"What it is",
-    "mgr.whatText":"An internal AI assistant that answers employee questions from company documentation. All data stays on the local server — nothing is sent to the cloud (ISO 27001 / NIS2). Every answer cites its source.",
+    "mgr.whatText":"An internal AI assistant that answers employee questions from company documentation. All data stays on the local server — nothing is sent to the cloud (ISO 27001 / NIS2). Every answer cites its source. It supports streamed answers, query attachments (documents and screenshots via OCR) and CS/EN.",
     "mgr.numbers":"Summary","mgr.docs":"documents in base","mgr.chunks":"text blocks","mgr.areas":"watched areas","mgr.lastScan":"last update",
     "mgr.scope":"Which document areas the assistant covers","mgr.col.area":"Area / path","mgr.col.cat":"Category","mgr.col.count":"Documents","mgr.col.updated":"Updated",
     "mgr.scopeHint":"Numbers shown are samples — once wired to the backend they load live from the database (GET /api/scope).",

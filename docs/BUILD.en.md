@@ -60,6 +60,12 @@ python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+**Query attachments (screenshot OCR):** the `pip` part is in `requirements.txt` (`python-multipart`, `pytesseract`, `Pillow`). Image OCR additionally needs the **system** package:
+```bash
+sudo apt install -y tesseract-ocr tesseract-ocr-ces
+```
+Without `python-multipart` attachment upload won't work at all; without `tesseract` documents (docx/pdf/xlsx/txt) work but screenshots return a message instead of text (handled, no crash).
+
 ## 5. Configuration (.env)
 
 ```bash

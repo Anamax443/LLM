@@ -61,6 +61,12 @@ python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+**Přílohy k dotazu (OCR screenshotů):** `pip` část je v `requirements.txt` (`python-multipart`, `pytesseract`, `Pillow`). Pro OCR obrázků je navíc nutný **systémový** balík:
+```bash
+sudo apt install -y tesseract-ocr tesseract-ocr-ces
+```
+Bez `python-multipart` nefunguje upload příloh vůbec; bez `tesseract` fungují dokumenty (docx/pdf/xlsx/txt), ale u screenshotů se místo textu vrátí hláška (ošetřeno, nespadne).
+
 ## 5. Konfigurace (.env)
 
 Zkopírujte vzor a upravte:

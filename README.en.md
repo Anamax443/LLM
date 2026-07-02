@@ -15,16 +15,16 @@ You ask in natural language (e.g. *"how do I restore a server from backup?"*) �
 - **AI backend:** [Ollama](https://ollama.com) (port 11434) — `nomic-embed-text` (768D embeddings) + `llama3.1` (generation).
 - **Vector DB:** [Qdrant](https://qdrant.tech) (port 6333), collection `axima_docs`, 768D, cosine distance.
 - **Ingest:** `watchdog_service.py` watches `incoming/`, atomic-moves to `docs/` (to avoid SMB locks), reads DOCX/XLSX/PDF, chunks (1000/200) and upserts into Qdrant.
-- **API:** `api.py` (FastAPI, port 8000) — `POST /ask`, `GET /api/version`, serves the web UI.
+- **API:** `api.py` (FastAPI, port 8000) — `POST /ask` (streamed), `GET /api/version`, `POST /api/verify` (path availability), `POST /api/extract` (text from attachments), serves the web UI.
 - **CLI:** `ask_ai.py` — query from the terminal.
-- **Web UI:** `web/index.html` — homepage with Assistant / Settings / Documentation / Management report tabs (per the AXIMA UI standard: dark+light, print in light, CS+EN, service footer with commit hash).
+- **Web UI:** `web/index.html` — homepage with Assistant / Settings / Documentation / Management report tabs (per the AXIMA UI standard: dark+light, print in light, CS+EN, **service line in the header** — health, model, commit, clock, GitHub link).
 
 ## Files
 
 | File | Purpose |
 |---|---|
 | `watchdog_service.py` | Ingest: folder watching, document reading, chunking, embedding, upsert to Qdrant |
-| `api.py` | FastAPI backend (`/ask`, `/api/version`), serves `web/` |
+| `api.py` | FastAPI backend (`/ask`, `/api/version`, `/api/verify`, `/api/extract`), serves `web/` |
 | `ask_ai.py` | CLI query client |
 | `web/index.html` | Homepage / UI (single self-contained file, no framework) |
 | `dokumentace.md` | Technical documentation (Czech) |
@@ -59,11 +59,11 @@ python3 api.py                  # terminal 2 → http://SERVER:8000
 
 `web/index.html` is served by `api.py` at `/` (single self-contained file, no framework, **AXIMA logo** in the header). Tabs:
 
-- **Assistant** — **streamed chat** with conversation history and Markdown support (`POST /ask`); sample mode when the backend is down. The user can **stop** generation at any time.
-- **Settings** — manage **watched paths** (add/remove, subfolders, extensions, active) + **Scan status** (idle/running, last/next scan, "Scan now", per-path document/block counts and freshness) + model/temperature/block count. *Paths are managed by the operator without IT.*
+- **Assistant** — **streamed chat** with history and Markdown (`POST /ask`); you can **attach files or paste a screenshot (Ctrl+V)** — content is turned into text (parsers + OCR, `POST /api/extract`) and added to the context. Generation can be **stopped**; sample mode when the backend is down.
+- **Settings** — manage **watched paths** (add/remove, subfolders, extensions, active), a **Verify path availability** button + **terminal** (real check via `POST /api/verify`; until verified the status is "unverified", never fabricated), **Scan status**, model/temperature/block count and "show in header" toggles. *Paths are managed by the operator without IT.*
 - **Documentation** — full documentation **inside the app** (side menu + articles: About, How it works, How to ask, Paths & scanning, Security) in corporate design, **no git/filesystem links**.
 - **Management report** — non-technical overview + **printable scope overview** (with the **AXIMA logo** in the print header). Printing is always in light mode.
-- **CS/EN** switch, **dark/light**, footer with **live clock + commit hash + health** (`GET /api/version` contract).
+- **CS/EN** switch, **dark/light**; **service line in the header** (health, **model** 🧠, commit, live clock, **GitHub** icon) — model and GitHub can be optionally hidden in Settings. `GET /api/version` contract.
 
 > Data components (paths, scan, scope) run on **sample data** and are ready to be wired to the backend (`/api/settings`, `/api/scope`, `/api/scan`).
 

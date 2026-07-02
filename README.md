@@ -31,16 +31,16 @@ Zeptáte se přirozeným jazykem (např. *„jak obnovit server ze zálohy?"*) �
 - **AI backend:** [Ollama](https://ollama.com) (port 11434) — `nomic-embed-text` (768D embeddingy) + `llama3.1` (generování).
 - **Vektorová DB:** [Qdrant](https://qdrant.tech) (port 6333), kolekce `axima_docs`, 768D, kosinová vzdálenost.
 - **Ingest:** `watchdog_service.py` sleduje `incoming/`, atomic-move do `docs/` (kvůli SMB zámkům), čte DOCX/XLSX/PDF, chunkuje (1000/200) a upsertuje do Qdrantu.
-- **API:** `api.py` (FastAPI, port 8000) — `POST /ask`, `GET /api/version`, servíruje web UI.
+- **API:** `api.py` (FastAPI, port 8000) — `POST /ask` (streamovaně), `GET /api/version`, `POST /api/verify` (dostupnost cest), `POST /api/extract` (text z příloh), servíruje web UI.
 - **CLI:** `ask_ai.py` — dotaz z terminálu.
-- **Web UI:** `web/index.html` — homepage se záložkami Asistent / Nastavení / Dokumentace / Manažerský výstup (dle AXIMA UI standardu: dark+light, tisk light, CZ+EN, servisní patička s commit hashem).
+- **Web UI:** `web/index.html` — homepage se záložkami Asistent / Nastavení / Dokumentace / Manažerský výstup (dle AXIMA UI standardu: dark+light, tisk light, CZ+EN, **servisní řádek v hlavičce** — health, model, commit, hodiny, GitHub odkaz).
 
 ## Soubory
 
 | Soubor | Účel |
 |---|---|
 | `watchdog_service.py` | Ingest: sledování složky, čtení dokumentů, chunkování, vektorizace, upsert do Qdrantu |
-| `api.py` | FastAPI backend (`/ask`, `/api/version`), servírování `web/` |
+| `api.py` | FastAPI backend (`/ask`, `/api/version`, `/api/verify`, `/api/extract`), servírování `web/` |
 | `ask_ai.py` | CLI klient pro dotazování |
 | `web/index.html` | Homepage / UI (samostatný soubor, bez frameworku) |
 | `dokumentace.md` | Technická dokumentace (architektura, provoz, known issues) |
@@ -75,11 +75,11 @@ python3 api.py                  # ve druhém → http://SERVER:8000
 
 `web/index.html` servíruje `api.py` na `/` (samostatný soubor, bez frameworku, **AXIMA logo** v hlavičce). Záložky:
 
-- **Asistent** — **streamovaný chat** s historií konverzace a podporou Markdownu (`POST /ask`); při nedostupném backendu ukázkový režim. Uživatel může generování kdykoli **zastavit**.
-- **Nastavení** — správa **hlídaných cest** (přidat/odebrat, podadresáře, přípony, aktivní) + **Stav skenování** (běh/nečinnost, poslední/příští sken, „Skenovat teď", per-cesta počet dokumentů/bloků a čerstvost) + model/teplota/počet bloků. *Cesty spravuje operátor bez zásahu IT.*
+- **Asistent** — **streamovaný chat** s historií a Markdownem (`POST /ask`); k dotazu lze **přiložit soubory nebo vložit screenshot (Ctrl+V)** — obsah se převede na text (parsery + OCR, `POST /api/extract`) a přidá ke kontextu. Generování lze **zastavit**; při nedostupném backendu ukázkový režim.
+- **Nastavení** — správa **hlídaných cest** (přidat/odebrat, podadresáře, přípony, aktivní), tlačítko **Ověřit dostupnost cest** + **terminál** (reálný check `POST /api/verify`; do ověření je STAV „neověřeno", nefabrikuje se), **Stav skenování**, model/teplota/počet bloků a přepínače „zobrazit v hlavičce". *Cesty spravuje operátor bez zásahu IT.*
 - **Dokumentace** — plnohodnotná dokumentace **uvnitř aplikace** (boční menu + články: O aplikaci, Jak to funguje, Jak se ptát, Cesty a skenování, Bezpečnost) ve firemním designu, **bez odkazů na git či soubory**.
 - **Manažerský výstup** — netechnický přehled + **tisknutelný přehled rozsahu** báze (s **AXIMA logem** v hlavičce tisku). Tisk je vždy ve světlém režimu.
-- Přepínač **CS/EN**, **dark/light**, patička s **živými hodinami + commit hashem + health** (kontrakt `GET /api/version`).
+- Přepínač **CS/EN**, **dark/light**; **servisní řádek v hlavičce** (health, **model** 🧠, commit, živé hodiny, **GitHub** ikona) — model a GitHub lze volitelně skrýt v Nastavení. Kontrakt `GET /api/version`.
 
 > Datové komponenty (cesty, sken, rozsah) běží na **vzorových datech** a jsou připravené na napojení na backend (`/api/settings`, `/api/scope`, `/api/scan`).
 
