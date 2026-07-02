@@ -57,7 +57,6 @@ def init_smb_session_for_path(unc_path):
     """Volitelně registruje session, pokud jsou v proměnných prostředí přihlašovací údaje."""
     if not HAS_SMBCLIENT:
         return
-    # Pokud jsou v env zadané přihlašovací údaje, zaregistrujeme je pro daný server
     # Odebereme username a password z registrace session, protože se spoléháme na Kerberos lístek z OS.
     # Dále, session by měla být registrována pouze pro hosta, nikoli pro celou UNC cestu.
     # Extrahujeme hosta z unc_path
@@ -109,17 +108,17 @@ def ask_ai_endpoint(req: QueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chyba databáze: {str(e)}")
 
-    raw_sources = [hit.payload['source'] for hit in search_result]
+    raw_sources = [hit.payload["source"] for hit in search_result]
     unique_sources = list(set(raw_sources))
     
-    context = "\n\n".join([f"--- Zdroj: {hit.payload['source']} ---\n{hit.payload['text']}" for hit in search_result])
+    context = "\n\n".join([f"--- Zdroj: {hit.payload["source"]} ---\n{hit.payload["text"]}" for hit in search_result])
     
     def event_generator():
         # Poslat nejprve zdroje
-        yield f"data: {json.dumps({'sources': unique_sources}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({"sources": unique_sources}, ensure_ascii=False)}\n\n"
         
         if not context.strip():
-            yield f"data: {json.dumps({'error': 'Nenašel jsem v databázi relevantní dokumenty.'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({"error": "Nenašel jsem v databázi relevantní dokumenty."}, ensure_ascii=False)}\n\n"
             return
 
         prompt = f"""KONTEXT:
@@ -141,13 +140,13 @@ OTÁZKA: {req.question}
             if resp.status_code == 200:
                 for line in resp.iter_lines():
                     if line:
-                        chunk = json.loads(line.decode('utf-8'))
+                        chunk = json.loads(line.decode("utf-8"))
                         token = chunk.get("response", "")
-                        yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+                        yield f"data: {json.dumps({"token": token}, ensure_ascii=False)}\n\n"
             else:
-                yield f"data: {json.dumps({'error': 'Model neodpověděl.'}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({"error": "Model neodpověděl."}, ensure_ascii=False)}\n\n"
         except Exception as e:
-            yield f"data: {json.dumps({'error': f'Chyba spojení s modelem: {str(e)}'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({"error": f"Chyba spojení s modelem: {str(e)}"}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -171,50 +170,30 @@ def verify_paths(req: VerifyRequest):
     for p in req.paths:
         ok = False
         error_msg = None
-        resolved = p
+        #resolved = p # Tato proměnná není v nové logice potřeba
         try:
-            if p.startswith("\\\\") and os.name != 'nt':
-                # Uživatelské SMB ověření na Linuxu
+            if p.startswith("\\\\") and os.name != "nt":
                 if not HAS_SMBCLIENT:
-                    raise ImportError("Knihovna 'smbclient' není nainstalována na serveru.")
-                # Před ověřením existence se pokusíme o inicializaci SMB relace
-                # Pro UNC cestu rozdělíme na share a relativní cestu
-                norm_path = p.replace("\\", "/")
-                path_parts = norm_path.split("/", 3) # Např. ["", "", "herkules.axinetwork.loc", "public/LumirLiduMil"]
-                if len(path_parts) < 4:
-                    raise ValueError(f"Neplatná UNC cesta: {p}")
-                
-                share_path = "//" + path_parts[2] + "/" + path_parts[3].split("/")[0] # //herkules.axinetwork.loc/public
-                relative_path = path_parts[3][len(path_parts[3].split("/")[0]):].lstrip("/") # LumirLiduMil (nebo prázdné pokud není podadresář)
-                
-                # Zaregistrujeme session pro hlavni share
-                init_smb_session_for_path(share_path)
+                    raise ImportError("Knihovna \'smbclient\' není nainstalována na serveru.")
 
-                # Ověříme existenci složky přes smbclient.stat
-                # Pro složky je file_attributes & 16 (FILE_ATTRIBUTE_DIRECTORY)
-                try:
-                    stat_res = smbclient.stat(p)
-                    ok = bool(stat_res.file_attributes & 16)
-                except FileNotFoundError:
-                    ok = False
-                    error_msg = "Cesta neexistuje nebo není dostupná."
-                except Exception as e:
-                    ok = False
-                    error_msg = str(e)
-
+                # Konverze: \\host\share\path -> smb://host/share/path
+                # Ujisti se, že host je FQDN (např. herkules.axinetwork.loc)
+                uri = "smb://" + p.lstrip("\\").replace("\\", "/")
+                
+                # Extrakce hosta pro registraci session
+                host = uri.split("/")[2]
+                smbclient.register_session(host, auth_protocol="negotiate")
+                
+                # Validace přes stat
+                stat_res = smbclient.stat(uri)
+                ok = bool(stat_res.file_attributes & 16)
             else:
-                # Standardní lokální nebo Windows UNC cesta
                 ok = os.path.isdir(p)
         except Exception as e:
             ok = False
             error_msg = str(e)
             
-        results.append({
-            "path": p, 
-            "ok": ok, 
-            "resolved": resolved,
-            "error": error_msg
-        })
+        results.append({"path": p, "ok": ok, "error": error_msg})
     return results
 
 
