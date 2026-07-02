@@ -176,16 +176,12 @@
   .doc-article li { margin: 4px 0; }
   @media (max-width: 760px) { .docs-layout { flex-direction: column; } .docs-nav { flex-direction: row; flex-wrap: wrap; position: static; min-width: 0; } }
 
-  /* ===== Footer service line ===== */
-  footer {
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    padding: 8px 20px; background: var(--panel); border-top: 1px solid var(--border);
-    font-size: 12px; color: var(--text-dim);
-  }
-  footer .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
-  footer .dot.ok { background: var(--ok); } footer .dot.err { background: var(--err); }
-  footer code { color: var(--text); }
-  footer .spacer { flex: 1; }
+  /* ===== Servisní řádek v HLAVIČCE (AXIMA standard) ===== */
+  .svcline { display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--text-dim); margin-right: 8px; white-space: nowrap; }
+  .svcline .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .svcline .dot.ok { background: var(--ok); } .svcline .dot.err { background: var(--err); }
+  .svcline code { color: var(--text); }
+  @media (max-width: 760px) { .svcline { display: none; } }
 
   /* ===== Print: vždy light ===== */
   @media print {
@@ -210,6 +206,11 @@
     <div class="subtitle" data-i18n="app.subtitle">Lokální AI nad interní dokumentací — nic neopouští firmu</div>
   </div>
   <span class="header-spacer"></span>
+  <div class="svcline">
+    <span><span class="dot" id="healthDot"></span><span id="healthText" data-i18n="footer.checking">Zjišťuji stav…</span></span>
+    <span><span data-i18n="footer.commit">Verze:</span> <code id="commit">—</code></span>
+    <span id="clock">—</span>
+  </div>
   <button class="icon-btn" id="langBtn" title="Přepnout jazyk / Switch language">CS</button>
   <button class="icon-btn" id="themeBtn" title="Světlý / tmavý režim">🌙</button>
 </header>
@@ -496,13 +497,6 @@
   </section>
 
 </main>
-
-<footer>
-  <span><span class="dot" id="healthDot"></span><span id="healthText" data-i18n="footer.checking">Zjišťuji stav…</span></span>
-  <span data-i18n="footer.commit">Verze:</span> <code id="commit">—</code>
-  <span class="spacer"></span>
-  <span id="clock">—</span>
-</footer>
 
 <script>
 /* ================= i18n ================= */
