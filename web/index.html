@@ -602,7 +602,8 @@ let paths = [
   { path: "\\\\fileserver\\Smernice", sub: true,  ext: "docx,pdf", ok: true,  on: true },
   { path: "\\\\fileserver\\IT\\Postupy", sub: true, ext: "docx,md", ok: true, on: true },
   { path: "\\\\fileserver\\Infrastruktura", sub: true, ext: "xlsx,pdf", ok: false, on: true },
-  { path: "\\\\nas02\\Provoz\\Zalohy", sub: false, ext: "pdf", ok: true, on: false }
+  { path: "\\\\nas02\\Provoz\\Zalohy", sub: false, ext: "pdf", ok: true, on: false },
+  { path: "\\\\herkules\\public\\LumirLiduMil", sub: true, ext: "docx,pdf,xlsx", ok: false, on: true }
 ];
 function renderPaths(){
   const _off = document.getElementById("offlineNote"); if (_off) _off.style.display = dataVerified ? "none" : "block";
