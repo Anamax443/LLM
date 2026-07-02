@@ -39,6 +39,9 @@ class QueryResponse(BaseModel):
     answer: str
     sources: list[str]
 
+class VerifyRequest(BaseModel):
+    paths: list[str]
+
 def get_embedding(text):
     resp = requests.post(f"{OLLAMA_URL}/embeddings", json={"model": "nomic-embed-text", "prompt": text})
     if resp.status_code == 200:
@@ -115,6 +118,20 @@ def version():
         "builtAt": _git("log", "-1", "--format=%cI"),
         "startedAt": STARTED_AT,
     }
+
+
+@app.post("/api/verify")
+def verify_paths(req: VerifyRequest):
+    """Ověří platnost/dostupnost cest ze strany serveru (os.path.isdir).
+    Vrací [{path, ok}] — reálný stav, který smí UI zobrazit jako ověřený."""
+    results = []
+    for p in req.paths:
+        try:
+            ok = os.path.isdir(p)
+        except Exception:
+            ok = False
+        results.append({"path": p, "ok": ok})
+    return results
 
 
 # Servírování web UI (index.html na kořeni). Mount se přidává poslední,

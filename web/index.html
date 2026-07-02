@@ -149,6 +149,10 @@
   .badge.off { background: var(--panel-2); color: var(--text-dim); }
   .toggle { cursor: pointer; }
 
+  /* ===== Terminál (ověření cest) ===== */
+  .terminal { display: none; margin-top: 14px; background: #0b0e14; color: #79e07f; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-family: Consolas, "Courier New", monospace; font-size: 12.5px; line-height: 1.55; max-height: 240px; overflow-y: auto; }
+  .terminal div { white-space: pre-wrap; word-break: break-all; }
+
   /* ===== Manager / print ===== */
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; }
   .stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
@@ -259,7 +263,9 @@
       </table>
       <div class="row" style="margin-top:14px;">
         <button class="btn secondary" id="addPathBtn" data-i18n="settings.add">+ Přidat cestu</button>
+        <button class="btn" id="verifyBtn" data-i18n="verify.btn">Ověřit dostupnost cest</button>
       </div>
+      <div class="terminal" id="verifyTerm"></div>
       <p class="hint" style="margin-top:10px;" data-i18n="settings.pathHint">Podporují se síťové cesty (UNC / mount) i podadresáře. Odebrání cesty smaže i její dokumenty z báze.</p>
     </div>
 
@@ -511,7 +517,7 @@ const I18N = {
     "assistant.thinking":"AI generuje odpověď…",
     "settings.h":"Nastavení","settings.lead":"Cesty se dají spravovat zde — bez zásahu IT technika. Ukládá se do databáze, změny se promítnou při dalším skenu.",
     "settings.paths":"Hlídané cesty s dokumenty","settings.col.path":"Cesta","settings.col.sub":"Podadresáře","settings.col.ext":"Přípony","settings.col.state":"Stav","settings.col.on":"Aktivní",
-    "settings.add":"+ Přidat cestu","settings.pathHint":"Podporují se síťové cesty (UNC / mount) i podadresáře. Odebrání cesty smaže i její dokumenty z báze.",
+    "settings.add":"+ Přidat cestu","verify.btn":"Ověřit dostupnost cest","verify.start":"Spouštím ověření dostupnosti cest…","verify.done":"Hotovo — STAV cest aktualizován podle serveru.","verify.nobackend":"Backend není připojen — ověření nelze provést na serveru. Následuje jen SIMULACE (výsledky nejsou reálné, STAV zůstává neověřeno).","verify.simdone":"Konec simulace. Reálný stav dodá běžící backend (endpoint /api/verify).","settings.pathHint":"Podporují se síťové cesty (UNC / mount) i podadresáře. Odebrání cesty smaže i její dokumenty z báze.",
     "settings.model":"Model a hledání","settings.chatModel":"Generativní model","settings.embModel":"Embedding model","settings.temp":"Teplota","settings.limit":"Bloků kontextu",
     "settings.save":"Uložit nastavení","settings.saveHint":"Runtime nastavení (model, teplota, cesty) se ukládá do SQL. Připojovací údaje zůstávají v .env.",
     "scan.h":"Stav skenování","scan.state":"Stav","scan.idle":"Nečinný","scan.running":"Probíhá skenování…","scan.last":"Poslední sken","scan.next":"Příští sken","scan.now":"Skenovat teď","scan.col.last":"Poslední sken","scan.col.docs":"Dokumentů","scan.col.blocks":"Bloků","scan.col.fresh":"Čerstvost","scan.fresh":"čerstvá","scan.stale":"zastaralá","scan.off":"vypnuto","scan.hint":"Reconciliation sken porovnává soubory se stavem v bázi (mtime/velikost, hash jen u změněných). Frekvence a alert na zastaralost se nastaví v provozu.","state.unverified":"neověřeno","settings.offline":"Dostupnost cest a čerstvost báze nelze v prohlížeči ověřit — dodá je až běžící backend. Zobrazené hodnoty jsou ukázkové.",
@@ -536,7 +542,7 @@ const I18N = {
     "assistant.thinking":"AI is generating an answer…",
     "settings.h":"Settings","settings.lead":"Paths can be managed here — no IT technician needed. Stored in the database, applied on the next scan.",
     "settings.paths":"Watched document paths","settings.col.path":"Path","settings.col.sub":"Subfolders","settings.col.ext":"Extensions","settings.col.state":"State","settings.col.on":"Active",
-    "settings.add":"+ Add path","settings.pathHint":"Network paths (UNC / mount) and subfolders are supported. Removing a path also deletes its documents from the base.",
+    "settings.add":"+ Add path","verify.btn":"Verify path availability","verify.start":"Starting path availability check…","verify.done":"Done — path status updated from the server.","verify.nobackend":"Backend not connected — the check can't run on the server. A SIMULATION follows (results are not real, status stays unverified).","verify.simdone":"End of simulation. Real status comes from the running backend (endpoint /api/verify).","settings.pathHint":"Network paths (UNC / mount) and subfolders are supported. Removing a path also deletes its documents from the base.",
     "settings.model":"Model & search","settings.chatModel":"Generative model","settings.embModel":"Embedding model","settings.temp":"Temperature","settings.limit":"Context blocks",
     "settings.save":"Save settings","settings.saveHint":"Runtime settings (model, temperature, paths) are stored in SQL. Connection credentials stay in .env.",
     "scan.h":"Scan status","scan.state":"State","scan.idle":"Idle","scan.running":"Scanning…","scan.last":"Last scan","scan.next":"Next scan","scan.now":"Scan now","scan.col.last":"Last scan","scan.col.docs":"Documents","scan.col.blocks":"Blocks","scan.col.fresh":"Freshness","scan.fresh":"fresh","scan.stale":"stale","scan.off":"off","scan.hint":"The reconciliation scan compares files with the base state (mtime/size, hashing only changed files). Frequency and stale alerts are configured in operations.","state.unverified":"unverified","settings.offline":"Path availability and base freshness cannot be verified in the browser — only the running backend provides them. Values shown are sample data.",
@@ -626,6 +632,43 @@ document.getElementById("addPathBtn").onclick = () => {
 document.getElementById("saveSettings").onclick = () => {
   alert(lang==="cs" ? "Uloženo (ukázka). Po napojení na backend se pošle na POST /api/settings." : "Saved (sample). Once wired, this POSTs to /api/settings.");
 };
+
+/* ================= Ověření platnosti/dostupnosti cest + terminál ================= */
+function _ts(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+function termClear(){ const el=document.getElementById("verifyTerm"); el.innerHTML=""; el.style.display="block"; }
+function termLine(s){ const el=document.getElementById("verifyTerm"); const d=document.createElement("div"); d.textContent = `[${_ts()}] ${s}`; el.appendChild(d); el.scrollTop=el.scrollHeight; }
+const _sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function verifyPaths(){
+  const btn = document.getElementById("verifyBtn");
+  btn.disabled = true;
+  termClear();
+  termLine(t("verify.start"));
+  try {
+    const r = await fetch("/api/verify", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ paths: paths.map(p => p.path) }) });
+    if (!r.ok) throw new Error("no endpoint");
+    const results = await r.json();   // [{path, ok}]
+    results.forEach(res => {
+      const i = paths.findIndex(p => p.path === res.path);
+      if (i >= 0) paths[i].ok = !!res.ok;
+      termLine(`${res.path} … ${res.ok ? "OK — dostupná" : "CHYBA — nedostupná"}`);
+    });
+    dataVerified = true;                 // teď je STAV skutečně ověřený serverem
+    termLine(t("verify.done"));
+    renderPaths();
+  } catch (e) {
+    termLine("[UKÁZKA] " + t("verify.nobackend"));
+    for (const p of paths) {
+      await _sleep(300);
+      termLine(`[UKÁZKA] ${p.path} … ${p.ok ? "dostupná" : "nedostupná"} (simulace)`);
+    }
+    termLine("[UKÁZKA] " + t("verify.simdone"));
+    // STAV zůstává „neověřeno" — simulace nenastavuje reálný stav
+  } finally {
+    btn.disabled = false;
+  }
+}
+document.getElementById("verifyBtn").onclick = verifyPaths;
 
 /* ================= Settings: stav skenování (sample data) ================= */
 let scanInfo = {
