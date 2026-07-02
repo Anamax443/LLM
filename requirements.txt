@@ -23,5 +23,10 @@ pdfplumber
 # --- Chunkování textu ---
 langchain-text-splitters
 
+# --- Přílohy: OCR screenshotů (vyžaduje systémový balík "tesseract-ocr" + "tesseract-ocr-ces") ---
+pytesseract
+Pillow
+python-multipart   # nutné pro upload příloh (FastAPI UploadFile)
+
 # --- SQL Server 2019 (roadmapa: manifest, audit, hybridní hledání) ---
 # pyodbc            # vyžaduje systémový "ODBC Driver 18 for SQL Server"

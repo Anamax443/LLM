@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import json
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -142,6 +142,51 @@ def verify_paths(req: VerifyRequest):
             ok = False
         results.append({"path": p, "ok": ok, "resolved": local})
     return results
+
+
+@app.post("/api/extract")
+async def extract_files(files: list[UploadFile] = File(...)):
+    """Vytáhne text z příloh k dotazu: dokumenty přes parsery, obrázky/screenshoty
+    přes OCR (pytesseract, pokud je na serveru). Vrací [{name, text}]."""
+    import io
+    out = []
+    for f in files:
+        data = await f.read()
+        name = f.filename or "soubor"
+        ext = os.path.splitext(name)[1].lower()
+        ctype = (f.content_type or "")
+        text = ""
+        try:
+            if ext in (".txt", ".md", ".csv", ".log"):
+                text = data.decode("utf-8", errors="replace")
+            elif ext == ".docx":
+                import docx
+                text = "\n".join(p.text for p in docx.Document(io.BytesIO(data)).paragraphs)
+            elif ext == ".xlsx":
+                import openpyxl
+                rows = []
+                wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
+                for sh in wb.worksheets:
+                    for row in sh.iter_rows(values_only=True):
+                        rows.append(" ".join(str(c) for c in row if c is not None))
+                text = "\n".join(rows)
+            elif ext == ".pdf":
+                import pdfplumber
+                with pdfplumber.open(io.BytesIO(data)) as pdf:
+                    text = "\n".join((pg.extract_text() or "") for pg in pdf.pages)
+            elif ctype.startswith("image/") or ext in (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"):
+                try:
+                    import pytesseract
+                    from PIL import Image
+                    text = pytesseract.image_to_string(Image.open(io.BytesIO(data)), lang="ces+eng")
+                except Exception as oe:
+                    text = f"[OCR na serveru není k dispozici ({oe}). Nainstaluj tesseract-ocr + balík ces.]"
+            else:
+                text = f"[nepodporovaný typ přílohy: {ext or ctype}]"
+        except Exception as e:
+            text = f"[chyba čtení přílohy: {e}]"
+        out.append({"name": name, "text": text.strip()[:20000]})
+    return out
 
 
 # Servírování web UI (index.html na kořeni). Mount se přidává poslední,

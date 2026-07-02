@@ -137,6 +137,14 @@
   .ask-box { display: flex; gap: 8px; margin-top: 16px; }
   .ask-box input { flex: 1; }
   .hint { color: var(--text-dim); font-size: 12px; }
+  .attach-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .attach-item { display: inline-flex; align-items: center; gap: 6px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 12px; }
+  .attach-item img { height: 28px; width: 28px; object-fit: cover; border-radius: 4px; }
+  .attach-item .rm { cursor: pointer; color: var(--text-dim); }
+  .attach-item .rm:hover { color: var(--err); }
+  .svcline a { color: var(--text-dim); display: inline-flex; align-items: center; }
+  .svcline a:hover { color: var(--accent); }
+  .svcline .model { display: inline-flex; align-items: center; gap: 4px; }
 
   /* ===== Tables (paths, scope) ===== */
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -208,8 +216,12 @@
   <span class="header-spacer"></span>
   <div class="svcline">
     <span><span class="dot" id="healthDot"></span><span id="healthText" data-i18n="footer.checking">Zjišťuji stav…</span></span>
+    <span class="model" id="hdrModel" title="Generativní model / Generative model">🧠 <code id="hdrModelName">llama3.1</code></span>
     <span><span data-i18n="footer.commit">Verze:</span> <code id="commit">—</code></span>
     <span id="clock">—</span>
+    <a id="hdrGithub" href="https://github.com/Axima-Git/LLM" target="_blank" rel="noopener" title="GitHub repozitář">
+      <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 012-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a>
   </div>
   <button class="icon-btn" id="langBtn" title="Přepnout jazyk / Switch language">CS</button>
   <button class="icon-btn" id="themeBtn" title="Světlý / tmavý režim">🌙</button>
@@ -234,10 +246,13 @@
     </div>
 
     <div class="ask-box">
+      <button class="btn secondary" id="attachBtn" title="Přiložit soubor nebo vložit screenshot (Ctrl+V)">📎</button>
+      <input type="file" id="fileInput" multiple accept="image/*,.pdf,.docx,.xlsx,.txt,.md,.csv" style="display:none">
       <input type="text" id="question" data-i18n-ph="assistant.ph" placeholder="Např. jak obnovit server ze zálohy?">
       <button class="btn" id="askBtn" data-i18n="assistant.ask">Zeptat se</button>
       <button class="btn secondary" id="stopBtn" style="display:none;" data-i18n="assistant.stop">Zastavit</button>
     </div>
+    <div class="attach-list" id="attachList"></div>
     <p class="hint" data-i18n="assistant.hint">Napojení na backend: POST /ask · při nedostupném backendu se zobrazí ukázková odpověď.</p>
   </section>
 
@@ -312,6 +327,10 @@
           <span data-i18n="settings.limit">Bloků kontextu</span>
           <input type="number" id="setLimit" value="6" min="1" max="20">
         </label>
+      </div>
+      <div class="row" style="margin-top:6px; gap:20px;">
+        <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="hdrShowModel" checked style="width:auto;"> <span data-i18n="settings.hdrModel">Zobrazit model v hlavičce</span></label>
+        <label style="display:inline-flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="hdrShowGithub" checked style="width:auto;"> <span data-i18n="settings.hdrGithub">Zobrazit odkaz na GitHub v hlavičce</span></label>
       </div>
       <button class="btn" id="saveSettings" data-i18n="settings.save">Uložit nastavení</button>
       <p class="hint" style="margin-top:10px;" data-i18n="settings.saveHint">Runtime nastavení (model, teplota, cesty) se ukládá do SQL. Připojovací údaje zůstávají v .env.</p>
@@ -513,7 +532,7 @@ const I18N = {
     "settings.paths":"Hlídané cesty s dokumenty","settings.col.path":"Cesta","settings.col.sub":"Podadresáře","settings.col.ext":"Přípony","settings.col.state":"Stav","settings.col.on":"Aktivní",
     "settings.add":"+ Přidat cestu","verify.btn":"Ověřit dostupnost cest","verify.start":"Spouštím ověření dostupnosti cest…","verify.done":"Hotovo — STAV cest aktualizován podle serveru.","verify.nobackend":"Backend není připojen — ověření nelze provést na serveru. Následuje jen SIMULACE (výsledky nejsou reálné, STAV zůstává neověřeno).","verify.simdone":"Konec simulace. Reálný stav dodá běžící backend (endpoint /api/verify).","settings.pathHint":"Podporují se síťové cesty (UNC / mount) i podadresáře. Odebrání cesty smaže i její dokumenty z báze.",
     "settings.model":"Model a hledání","settings.chatModel":"Generativní model","settings.embModel":"Embedding model","settings.temp":"Teplota","settings.limit":"Bloků kontextu",
-    "settings.save":"Uložit nastavení","settings.saveHint":"Runtime nastavení (model, teplota, cesty) se ukládá do SQL. Připojovací údaje zůstávají v .env.",
+    "settings.save":"Uložit nastavení","settings.hdrModel":"Zobrazit model v hlavičce","settings.hdrGithub":"Zobrazit odkaz na GitHub v hlavičce","settings.saveHint":"Runtime nastavení (model, teplota, cesty) se ukládá do SQL. Připojovací údaje zůstávají v .env.",
     "scan.h":"Stav skenování","scan.state":"Stav","scan.idle":"Nečinný","scan.running":"Probíhá skenování…","scan.last":"Poslední sken","scan.next":"Příští sken","scan.now":"Skenovat teď","scan.col.last":"Poslední sken","scan.col.docs":"Dokumentů","scan.col.blocks":"Bloků","scan.col.fresh":"Čerstvost","scan.fresh":"čerstvá","scan.stale":"zastaralá","scan.off":"vypnuto","scan.hint":"Reconciliation sken porovnává soubory se stavem v bázi (mtime/velikost, hash jen u změněných). Frekvence a alert na zastaralost se nastaví v provozu.","state.unverified":"neověřeno","settings.offline":"Dostupnost cest a čerstvost báze nelze v prohlížeči ověřit — dodá je až běžící backend. Zobrazené hodnoty jsou ukázkové.",
     "docs.h":"Dokumentace","docs.lead":"Vše podstatné přehledně přímo v aplikaci.","docs.nav.about":"O aplikaci","docs.nav.how":"Jak to funguje","docs.nav.ask":"Jak se ptát","docs.nav.paths":"Cesty a skenování","docs.nav.security":"Bezpečnost a soukromí",
     "docs.readme":"README — co to je a jak to funguje","docs.howlearn":"Jak asistent umí naše data (RAG vs učení modelu)","docs.mgr":"Manažerský výstup — přehled a rozsah","docs.build":"BUILD.md — postavení celého systému od nuly",
@@ -538,7 +557,7 @@ const I18N = {
     "settings.paths":"Watched document paths","settings.col.path":"Path","settings.col.sub":"Subfolders","settings.col.ext":"Extensions","settings.col.state":"State","settings.col.on":"Active",
     "settings.add":"+ Add path","verify.btn":"Verify path availability","verify.start":"Starting path availability check…","verify.done":"Done — path status updated from the server.","verify.nobackend":"Backend not connected — the check can't run on the server. A SIMULATION follows (results are not real, status stays unverified).","verify.simdone":"End of simulation. Real status comes from the running backend (endpoint /api/verify).","settings.pathHint":"Network paths (UNC / mount) and subfolders are supported. Removing a path also deletes its documents from the base.",
     "settings.model":"Model & search","settings.chatModel":"Generative model","settings.embModel":"Embedding model","settings.temp":"Temperature","settings.limit":"Context blocks",
-    "settings.save":"Save settings","settings.saveHint":"Runtime settings (model, temperature, paths) are stored in SQL. Connection credentials stay in .env.",
+    "settings.save":"Save settings","settings.hdrModel":"Show model in header","settings.hdrGithub":"Show GitHub link in header","settings.saveHint":"Runtime settings (model, temperature, paths) are stored in SQL. Connection credentials stay in .env.",
     "scan.h":"Scan status","scan.state":"State","scan.idle":"Idle","scan.running":"Scanning…","scan.last":"Last scan","scan.next":"Next scan","scan.now":"Scan now","scan.col.last":"Last scan","scan.col.docs":"Documents","scan.col.blocks":"Blocks","scan.col.fresh":"Freshness","scan.fresh":"fresh","scan.stale":"stale","scan.off":"off","scan.hint":"The reconciliation scan compares files with the base state (mtime/size, hashing only changed files). Frequency and stale alerts are configured in operations.","state.unverified":"unverified","settings.offline":"Path availability and base freshness cannot be verified in the browser — only the running backend provides them. Values shown are sample data.",
     "docs.h":"Documentation","docs.lead":"Everything essential, right in the app.","docs.nav.about":"About","docs.nav.how":"How it works","docs.nav.ask":"How to ask","docs.nav.paths":"Paths & scanning","docs.nav.security":"Security & privacy",
     "docs.readme":"README — what it is and how it works","docs.howlearn":"How the assistant knows our data (RAG vs model training)","docs.mgr":"Management report — overview & scope","docs.build":"BUILD.md — build the whole system from scratch",
@@ -781,9 +800,11 @@ function renderMarkdown(text) {
 async function ask(){
   const qInput = document.getElementById("question");
   const q = qInput.value.trim();
-  if (!q) return;
-  
+  if (!q && attachments.length === 0) return;
+
   qInput.value = "";
+  const sending = attachments.slice();   // snapshot příloh k odeslání
+  attachments = []; renderAttach();
   
   const chatHistory = document.getElementById("chatHistory");
   const askBtn = document.getElementById("askBtn");
@@ -796,7 +817,12 @@ async function ask(){
   // 1. Přidat bublinu uživatele
   const userDiv = document.createElement("div");
   userDiv.className = "chat-bubble user-bubble";
-  userDiv.textContent = q;
+  userDiv.textContent = q || (lang === "cs" ? "(příloha)" : "(attachment)");
+  if (sending.length) {
+    const at = document.createElement("div"); at.className = "sources";
+    sending.forEach(a => { const c = document.createElement("span"); c.className = "source-chip"; c.textContent = (a.kind === "image" ? "🖼 " : "📎 ") + a.name; at.appendChild(c); });
+    userDiv.appendChild(at);
+  }
   chatHistory.appendChild(userDiv);
   chatHistory.scrollTop = chatHistory.scrollHeight;
   
@@ -816,10 +842,26 @@ async function ask(){
   let sourcesDiv = null;
   
   try {
+    let question = q;
+    if (sending.length) {
+      aiDiv.innerHTML = `<span class="thinking-text">${lang === "cs" ? "Zpracovávám přílohy…" : "Processing attachments…"}</span>`;
+      try {
+        const fd = new FormData();
+        sending.forEach(a => fd.append("files", a.file, a.name));
+        const er = await fetch("/api/extract", { method: "POST", body: fd, signal: abortController.signal });
+        if (!er.ok) throw new Error("extract");
+        const parts = await er.json();
+        question = (q || (lang === "cs" ? "Vysvětli obsah přílohy." : "Explain the attachment.")) + parts.map(p => `\n\n[Příloha: ${p.name}]\n${p.text}`).join("");
+      } catch (ex) {
+        if (ex.name === "AbortError") throw ex;
+        question = q;   // extrakce nedostupná (offline / chybí OCR) — pošle se aspoň text dotazu
+      }
+      aiDiv.innerHTML = `<span class="thinking-text">${t("assistant.thinking")}</span>`;
+    }
     const r = await fetch("/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: q }),
+      body: JSON.stringify({ question }),
       signal: abortController.signal
     });
     
@@ -906,6 +948,56 @@ document.getElementById("stopBtn").onclick = () => {
   if (abortController) abortController.abort();
 };
 document.getElementById("question").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
+
+/* ================= Přílohy (soubory + schránka/Ctrl+V) ================= */
+let attachments = [];
+function renderAttach(){
+  const el = document.getElementById("attachList"); if (!el) return;
+  el.innerHTML = "";
+  attachments.forEach((a, i) => {
+    const item = document.createElement("span"); item.className = "attach-item";
+    if (a.kind === "image" && a.dataUrl) { const im = document.createElement("img"); im.src = a.dataUrl; item.appendChild(im); }
+    else { item.appendChild(document.createTextNode("📄")); }
+    const nm = document.createElement("span"); nm.textContent = a.name; item.appendChild(nm);
+    const rm = document.createElement("span"); rm.className = "rm"; rm.textContent = "✕"; rm.title = lang === "cs" ? "Odebrat" : "Remove"; rm.onclick = () => { attachments.splice(i, 1); renderAttach(); }; item.appendChild(rm);
+    el.appendChild(item);
+  });
+}
+function addFiles(fileList){
+  for (const f of fileList) {
+    const kind = (f.type || "").startsWith("image/") ? "image" : "file";
+    const a = { name: f.name || (kind === "image" ? "screenshot.png" : "soubor"), file: f, kind, dataUrl: null };
+    if (kind === "image") { const rd = new FileReader(); rd.onload = e => { a.dataUrl = e.target.result; renderAttach(); }; rd.readAsDataURL(f); }
+    attachments.push(a);
+  }
+  renderAttach();
+}
+document.getElementById("attachBtn").onclick = () => document.getElementById("fileInput").click();
+document.getElementById("fileInput").onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+document.getElementById("question").addEventListener("paste", e => {
+  const items = e.clipboardData && e.clipboardData.items; if (!items) return;
+  const files = [];
+  for (const it of items) { if (it.kind === "file") { const f = it.getAsFile(); if (f) files.push(f); } }
+  if (files.length) { e.preventDefault(); addFiles(files); }
+});
+
+/* ================= Hlavička: model + GitHub (volitelné dle Nastavení) ================= */
+function applyHeaderExtras(){
+  const showModel = localStorage.getItem("axima.hdr.model") !== "0";
+  const showGh = localStorage.getItem("axima.hdr.github") !== "0";
+  const mn = document.getElementById("hdrModelName"), sm = document.getElementById("setModel");
+  if (mn && sm) mn.textContent = sm.value || "llama3.1";
+  const m = document.getElementById("hdrModel"), g = document.getElementById("hdrGithub");
+  if (m) m.style.display = showModel ? "" : "none";
+  if (g) g.style.display = showGh ? "" : "none";
+  const cM = document.getElementById("hdrShowModel"), cG = document.getElementById("hdrShowGithub");
+  if (cM) cM.checked = showModel;
+  if (cG) cG.checked = showGh;
+}
+document.getElementById("hdrShowModel").onchange = e => { localStorage.setItem("axima.hdr.model", e.target.checked ? "1" : "0"); applyHeaderExtras(); };
+document.getElementById("hdrShowGithub").onchange = e => { localStorage.setItem("axima.hdr.github", e.target.checked ? "1" : "0"); applyHeaderExtras(); };
+document.getElementById("setModel").addEventListener("input", applyHeaderExtras);
+applyHeaderExtras();
 
 /* ================= Footer: /api/version + health + hodiny ================= */
 function refreshHealthText(){
