@@ -652,7 +652,7 @@ async function verifyPaths(){
     results.forEach(res => {
       const i = paths.findIndex(p => p.path === res.path);
       if (i >= 0) paths[i].ok = !!res.ok;
-      termLine(`${res.path} … ${res.ok ? "OK — dostupná" : "CHYBA — nedostupná"}`);
+      termLine(`${res.path} … ${res.ok ? "OK — dostupná" : "CHYBA — nedostupná"}${res.resolved ? "  → " + res.resolved : ""}`);
     });
     dataVerified = true;                 // teď je STAV skutečně ověřený serverem
     termLine(t("verify.done"));

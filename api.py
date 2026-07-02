@@ -31,6 +31,15 @@ QDRANT_URL = "http://localhost:6333"
 OLLAMA_URL = "http://localhost:11434/api"
 COLLECTION_NAME = "axima_docs"
 CHAT_MODEL = "llama3.1"
+# UNC (\\host\share\...) → lokální mount na Linuxu (/mnt/host/share/...). Kořen lze změnit přes env UNC_MOUNT_ROOT.
+MOUNT_ROOT = os.environ.get("UNC_MOUNT_ROOT", "/mnt")
+
+def unc_to_local(path):
+    """Přeloží Windows UNC cestu na lokální mount point; ostatní cesty vrací beze změny."""
+    if path.startswith("\\\\"):
+        parts = [seg for seg in path.replace("\\", "/").split("/") if seg]
+        return os.path.join(MOUNT_ROOT, *parts)
+    return path
 
 class QueryRequest(BaseModel):
     question: str
@@ -126,11 +135,12 @@ def verify_paths(req: VerifyRequest):
     Vrací [{path, ok}] — reálný stav, který smí UI zobrazit jako ověřený."""
     results = []
     for p in req.paths:
+        local = unc_to_local(p)
         try:
-            ok = os.path.isdir(p)
+            ok = os.path.isdir(local)
         except Exception:
             ok = False
-        results.append({"path": p, "ok": ok})
+        results.append({"path": p, "ok": ok, "resolved": local})
     return results
 
 
