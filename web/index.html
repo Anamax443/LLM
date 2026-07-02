@@ -104,11 +104,35 @@
   label.field span { display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 4px; }
 
   /* ===== Assistant / chat ===== */
-  .chat-answer { white-space: pre-wrap; }
-  .sources { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .chat-container {
+    max-height: 480px; overflow-y: auto; display: flex;
+    flex-direction: column; gap: 14px; margin-bottom: 16px;
+    padding: 14px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--panel);
+  }
+  .chat-bubble {
+    padding: 12px 16px; border-radius: 12px; max-width: 85%;
+    line-height: 1.6; word-wrap: break-word; font-size: 13.5px;
+  }
+  .user-bubble {
+    align-self: flex-end; background-color: var(--accent); color: #fff;
+    border-radius: 12px 12px 0 12px; border: none;
+  }
+  .ai-bubble {
+    align-self: flex-start; background-color: var(--panel-2); color: var(--text);
+    border-radius: 12px 12px 12px 0; border: 1px solid var(--border);
+  }
+  .thinking-text {
+    font-style: italic; color: var(--text-dim);
+  }
+  .chat-placeholder {
+    color: var(--text-dim); font-style: italic; text-align: center; margin: 40px 0;
+  }
+  .sources { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
   .source-chip {
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 20px;
-    padding: 5px 12px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 20px;
+    padding: 4px 10px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 6px;
+    color: var(--text);
   }
   .ask-box { display: flex; gap: 8px; margin-top: 16px; }
   .ask-box input { flex: 1; }
@@ -199,13 +223,15 @@
   <section class="view active" id="view-asistent">
     <h2 data-i18n="assistant.h">Zeptejte se na interní postupy</h2>
     <p class="lead" data-i18n="assistant.lead">Směrnice, infrastruktura, IP adresy, postupy. Odpověď vždy s uvedením zdroje.</p>
-    <div class="card">
-      <div class="chat-answer" id="answer" data-i18n="assistant.placeholder">Zadejte dotaz níže. Asistent odpovídá výhradně na základě firemních dokumentů — pokud odpověď nezná, řekne to a nevymýšlí si.</div>
-      <div class="sources" id="sources"></div>
+    
+    <div class="chat-container" id="chatHistory">
+      <div class="chat-placeholder" id="assistant-ph-text" data-i18n="assistant.placeholder">Zadejte dotaz níže. Asistent odpovídá výhradně na základě firemních dokumentů — pokud odpověď nezná, řekne to a nevymýšlí si.</div>
     </div>
+
     <div class="ask-box">
       <input type="text" id="question" data-i18n-ph="assistant.ph" placeholder="Např. jak obnovit server ze zálohy?">
       <button class="btn" id="askBtn" data-i18n="assistant.ask">Zeptat se</button>
+      <button class="btn secondary" id="stopBtn" style="display:none;" data-i18n="assistant.stop">Zastavit</button>
     </div>
     <p class="hint" data-i18n="assistant.hint">Napojení na backend: POST /ask · při nedostupném backendu se zobrazí ukázková odpověď.</p>
   </section>
@@ -479,7 +505,7 @@ const I18N = {
     "tab.assistant":"Asistent","tab.settings":"Nastavení","tab.docs":"Dokumentace","tab.manager":"Manažerský výstup",
     "assistant.h":"Zeptejte se na interní postupy","assistant.lead":"Směrnice, infrastruktura, IP adresy, postupy. Odpověď vždy s uvedením zdroje.",
     "assistant.placeholder":"Zadejte dotaz níže. Asistent odpovídá výhradně na základě firemních dokumentů — pokud odpověď nezná, řekne to a nevymýšlí si.",
-    "assistant.ph":"Např. jak obnovit server ze zálohy?","assistant.ask":"Zeptat se",
+    "assistant.ph":"Např. jak obnovit server ze zálohy?","assistant.ask":"Zeptat se","assistant.stop":"Zastavit",
     "assistant.hint":"Napojení na backend: POST /ask · při nedostupném backendu se zobrazí ukázková odpověď.",
     "assistant.thinking":"AI generuje odpověď…",
     "settings.h":"Nastavení","settings.lead":"Cesty se dají spravovat zde — bez zásahu IT technika. Ukládá se do databáze, změny se promítnou při dalším skenu.",
@@ -504,7 +530,7 @@ const I18N = {
     "tab.assistant":"Assistant","tab.settings":"Settings","tab.docs":"Documentation","tab.manager":"Management report",
     "assistant.h":"Ask about internal procedures","assistant.lead":"Policies, infrastructure, IP addresses, procedures. Every answer cites its source.",
     "assistant.placeholder":"Type a question below. The assistant answers strictly from company documents — if it doesn't know, it says so and never makes things up.",
-    "assistant.ph":"E.g. how do I restore a server from backup?","assistant.ask":"Ask",
+    "assistant.ph":"E.g. how do I restore a server from backup?","assistant.ask":"Ask","assistant.stop":"Stop",
     "assistant.hint":"Backend: POST /ask · a sample answer is shown when the backend is unavailable.",
     "assistant.thinking":"AI is generating an answer…",
     "settings.h":"Settings","settings.lead":"Paths can be managed here — no IT technician needed. Stored in the database, applied on the next scan.",
@@ -663,26 +689,166 @@ document.getElementById("printBtn").onclick = () => {
   if (!wasLight) { document.documentElement.dataset.theme = theme; }
 };
 
-/* ================= Assistant (POST /ask, graceful fallback) ================= */
+/* ================= Assistant (POST /ask with streaming, markdown and AbortController) ================= */
+let abortController = null;
+
+function escapeHTML(str) {
+  return str.replace(/[&<>'"]/g, 
+    tag => ({ '&': '&', '<': '<', '>': '>', "'": '&#39;', '"': '"' }[tag] || tag)
+  );
+}
+
+function renderMarkdown(text) {
+  let html = escapeHTML(text);
+  
+  // Bloky kódu: ```code```
+  html = html.replace(/```([\s\S]+?)```/g, '<pre style="background: var(--panel-2); padding: 12px; border-radius: 6px; border: 1px solid var(--border); overflow-x: auto; margin: 8px 0; font-family: Consolas, monospace; font-size: 12.5px;"><code>$1</code></pre>');
+  
+  // Inline kód: `code`
+  html = html.replace(/`([^`]+)`/g, '<code style="background: var(--panel-2); padding: 2px 5px; border-radius: 4px; font-family: Consolas, monospace; border: 1px solid var(--border); font-size: 12.5px;">$1</code>');
+  
+  // Tučné: **text**
+  html = html.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
+  
+  // Kurzíva: *text*
+  html = html.replace(/\*([\s\S]+?)\*/g, '<em>$1</em>');
+  
+  // Odrážky (na začátku řádků)
+  html = html.replace(/^(?:-|\*)\s+(.+)$/gm, '<li style="margin-left: 15px; margin-top: 4px; margin-bottom: 4px;">$1</li>');
+  
+  // Odřádkování
+  html = html.replace(/\n/g, '<br>');
+  
+  return html;
+}
+
 async function ask(){
-  const q = document.getElementById("question").value.trim();
+  const qInput = document.getElementById("question");
+  const q = qInput.value.trim();
   if (!q) return;
-  const ans = document.getElementById("answer"), src = document.getElementById("sources");
-  ans.textContent = t("assistant.thinking"); src.innerHTML = "";
+  
+  qInput.value = "";
+  
+  const chatHistory = document.getElementById("chatHistory");
+  const askBtn = document.getElementById("askBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  
+  // Odstranit placeholder při prvním dotazu
+  const ph = document.getElementById("assistant-ph-text");
+  if (ph) ph.remove();
+  
+  // 1. Přidat bublinu uživatele
+  const userDiv = document.createElement("div");
+  userDiv.className = "chat-bubble user-bubble";
+  userDiv.textContent = q;
+  chatHistory.appendChild(userDiv);
+  chatHistory.scrollTop = chatHistory.scrollHeight;
+  
+  // 2. Přidat bublinu pro odpověď AI (s indikací přemýšlení)
+  const aiDiv = document.createElement("div");
+  aiDiv.className = "chat-bubble ai-bubble";
+  aiDiv.innerHTML = `<span class="thinking-text">${t("assistant.thinking")}</span>`;
+  chatHistory.appendChild(aiDiv);
+  chatHistory.scrollTop = chatHistory.scrollHeight;
+  
+  // Nastavit tlačítka
+  askBtn.style.display = "none";
+  stopBtn.style.display = "";
+  
+  abortController = new AbortController();
+  let fullText = "";
+  let sourcesDiv = null;
+  
   try {
-    const r = await fetch("/ask", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({question:q}) });
+    const r = await fetch("/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: q }),
+      signal: abortController.signal
+    });
+    
     if (!r.ok) throw new Error("backend");
-    const d = await r.json();
-    ans.textContent = d.answer || "—";
-    (d.sources||[]).forEach(s => { const c=document.createElement("span"); c.className="source-chip"; c.textContent="📄 "+s; src.appendChild(c); });
+    
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+    
+    aiDiv.innerHTML = ""; // smazat "AI generuje..."
+    
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // ponechat si zbytek řádku v bufferu
+      
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(trimmed.substring(6));
+            
+            if (data.sources) {
+              sourcesDiv = document.createElement("div");
+              sourcesDiv.className = "sources";
+              data.sources.forEach(s => {
+                const c = document.createElement("span");
+                c.className = "source-chip";
+                c.textContent = "📄 " + s;
+                sourcesDiv.appendChild(c);
+              });
+            } else if (data.token !== undefined) {
+              fullText += data.token;
+              aiDiv.innerHTML = renderMarkdown(fullText);
+              if (sourcesDiv) {
+                aiDiv.appendChild(sourcesDiv);
+              }
+              chatHistory.scrollTop = chatHistory.scrollHeight;
+            } else if (data.error) {
+              aiDiv.innerHTML = `<span style="color: var(--err)">${data.error}</span>`;
+            }
+          } catch (err) {
+            console.error("Chyba parsování JSON řádku:", err, trimmed);
+          }
+        }
+      }
+    }
   } catch (e) {
-    ans.textContent = (lang==="cs"
-      ? "[Ukázkový režim] Backend zatím neběží. Po spuštění FastAPI (POST /ask) se sem vypíše reálná odpověď s citovanými zdroji.\n\nPříklad: „Postup obnovy serveru — 1) najděte server v Veeam a klikněte pravým… 2) zvolte zálohu a potvrďte OK…“"
-      : "[Sample mode] Backend not running yet. Once FastAPI is up (POST /ask), the real answer with cited sources appears here.");
-    ["Obnovení serveru ze zálohy.docx","Nastavení authenticatoru.docx"].forEach(s => { const c=document.createElement("span"); c.className="source-chip"; c.textContent="📄 "+s; src.appendChild(c); });
+    if (e.name === "AbortError") {
+      aiDiv.innerHTML = renderMarkdown(fullText + "\n\n*(Generování přerušeno uživatelem)*");
+      if (sourcesDiv) aiDiv.appendChild(sourcesDiv);
+    } else {
+      aiDiv.innerHTML = "";
+      const errSpan = document.createElement("span");
+      errSpan.style.color = "var(--err)";
+      errSpan.textContent = lang === "cs"
+        ? "[Ukázkový režim] Backend zatím neběží. Po spuštění FastAPI (POST /ask) se sem vypíše reálná odpověď s citovanými zdroji.\n\nPříklad: „Postup obnovy serveru — 1) najděte server v Veeam a klikněte pravým… 2) zvolte zálohu a potvrďte OK…“"
+        : "[Sample mode] Backend not running yet. Once FastAPI is up (POST /ask), the real answer with cited sources appears here.";
+      aiDiv.appendChild(errSpan);
+      
+      sourcesDiv = document.createElement("div");
+      sourcesDiv.className = "sources";
+      ["Obnovení serveru ze zálohy.docx", "Nastavení authenticatoru.docx"].forEach(s => {
+        const c = document.createElement("span");
+        c.className = "source-chip";
+        c.textContent = "📄 " + s;
+        sourcesDiv.appendChild(c);
+      });
+      aiDiv.appendChild(sourcesDiv);
+    }
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+  } finally {
+    askBtn.style.display = "";
+    stopBtn.style.display = "none";
+    abortController = null;
   }
 }
+
 document.getElementById("askBtn").onclick = ask;
+document.getElementById("stopBtn").onclick = () => {
+  if (abortController) abortController.abort();
+};
 document.getElementById("question").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
 
 /* ================= Footer: /api/version + health + hodiny ================= */

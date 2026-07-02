@@ -2,9 +2,10 @@ import os
 import subprocess
 from datetime import datetime, timezone
 
+import json
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import requests
@@ -44,7 +45,7 @@ def get_embedding(text):
         return resp.json().get("embedding")
     return None
 
-@app.post("/ask", response_model=QueryResponse)
+@app.post("/ask")
 def ask_ai_endpoint(req: QueryRequest):
     vector = get_embedding(req.question)
     if not vector:
@@ -52,7 +53,6 @@ def ask_ai_endpoint(req: QueryRequest):
 
     client = QdrantClient(QDRANT_URL)
     try:
-        # Zvýšeno na 6 bloků pro zachycení celého kontextu dokumentu
         search_result = client.query_points(
             collection_name=COLLECTION_NAME,
             query=vector,
@@ -66,11 +66,15 @@ def ask_ai_endpoint(req: QueryRequest):
     
     context = "\n\n".join([f"--- Zdroj: {hit.payload['source']} ---\n{hit.payload['text']}" for hit in search_result])
     
-    if not context.strip():
-        return QueryResponse(answer="Nenašel jsem v databázi relevantní dokumenty.", sources=[])
+    def event_generator():
+        # Poslat nejprve zdroje
+        yield f"data: {json.dumps({'sources': unique_sources}, ensure_ascii=False)}\n\n"
+        
+        if not context.strip():
+            yield f"data: {json.dumps({'error': 'Nenašel jsem v databázi relevantní dokumenty.'}, ensure_ascii=False)}\n\n"
+            return
 
-    # Detailní a striktní prompt (ochrana proti halucinacím a ztrátě detailů)
-    prompt = f"""Jsi senior IT administrátor ve firmě AXIMA. Tvým úkolem je vysvětlit postupy detailně, krok za krokem, aby to zvládl i neznalý člověk. 
+        prompt = f"""Jsi senior IT administrátor ve firmě AXIMA. Tvým úkolem je vysvětlit postupy detailně, krok za krokem, aby to zvládl i neznalý člověk. 
 Nevynechávej ŽÁDNÉ technické detaily z kontextu (např. IP adresy, názvy programů jako Veeam, cesty). Pokud odpověď v kontextu vůbec není, řekni 'Nevím', přísně zakazuji si cokoliv domýšlet nebo halucinovat.
     
 KONTEXT:
@@ -78,19 +82,28 @@ KONTEXT:
 
 OTÁZKA: {req.question}
 """
-    
-    resp = requests.post(f"{OLLAMA_URL}/generate", json={
-        "model": CHAT_MODEL,
-        "prompt": prompt,
-        "stream": False
-    })
-    
-    if resp.status_code == 200:
-        answer = resp.json().get("response", "[CHYBA] Prázdná odpověď.")
-    else:
-        raise HTTPException(status_code=500, detail="Model neodpověděl.")
+        try:
+            resp = requests.post(
+                f"{OLLAMA_URL}/generate",
+                json={
+                    "model": CHAT_MODEL,
+                    "prompt": prompt,
+                    "stream": True
+                },
+                stream=True
+            )
+            if resp.status_code == 200:
+                for line in resp.iter_lines():
+                    if line:
+                        chunk = json.loads(line.decode('utf-8'))
+                        token = chunk.get("response", "")
+                        yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+            else:
+                yield f"data: {json.dumps({'error': 'Model neodpověděl.'}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': f'Chyba spojení s modelem: {str(e)}'}, ensure_ascii=False)}\n\n"
 
-    return QueryResponse(answer=answer, sources=unique_sources)
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.get("/api/version")
