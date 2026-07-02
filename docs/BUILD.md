@@ -83,6 +83,8 @@ mkdir -p /data/llm-demo/watchdog/docs
 ### Síťové cesty — DŮLEŽITÉ
 Pokud dokumenty leží na **síťovém úložišti (SMB/CIFS/NFS)**, `watchdog` (inotify) **nemusí generovat události** — inotify nefunguje spolehlivě přes síťové mounty. Cílový model je proto **reconciliation sken** (periodické projití stromu + porovnání se stavem v DB), který inotify nepotřebuje. Do doby jeho nasazení používejte lokální `incoming/` (kam Samba kopíruje), ne přímé hlídání síťové cesty. Viz [HANDOFF.md](HANDOFF.md).
 
+> **UNC → mount (deployment):** operátor zadává cesty ve tvaru `\\server\share\...`, ale Linux je sám neotevře — share musí být **namountovaný** (např. `\\herkules\public\LumirLiduMil` → `/mnt/herkules/public/LumirLiduMil`). Bez mountu vrátí `os.path.isdir` (a tedy `/api/verify`) vždy „nedostupná". Při nasazení buď mountovat všechny sledované share, nebo doplnit v backendu **mapu UNC→mount**, která zadanou UNC cestu přeloží na lokální mount point.
+
 ## 7. Spuštění
 
 ```bash

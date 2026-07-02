@@ -79,6 +79,8 @@ mkdir -p /data/llm-demo/watchdog/docs
 ### Network paths — IMPORTANT
 If documents live on **network storage (SMB/CIFS/NFS)**, `watchdog` (inotify) **may not fire events** — inotify is unreliable over network mounts. The target model is therefore a **reconciliation scan** (periodic tree walk + diff against DB state), which needs no inotify. Until it ships, use the local `incoming/` folder (which Samba copies into) rather than watching the network path directly. See [HANDOFF.md](HANDOFF.md).
 
+> **UNC → mount (deployment):** the operator enters paths as `\\server\share\...`, but Linux can't open them directly — the share must be **mounted** (e.g. `\\herkules\public\LumirLiduMil` → `/mnt/herkules/public/LumirLiduMil`). Without a mount, `os.path.isdir` (hence `/api/verify`) always returns "unavailable". On deployment, either mount every watched share or add a **UNC→mount map** in the backend that translates the entered UNC path to the local mount point.
+
 ## 7. Run
 
 ```bash
