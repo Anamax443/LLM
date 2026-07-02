@@ -67,7 +67,8 @@ def init_smb_session_for_path(unc_path):
         try:
             # Registrace session pouze pro hosta s Kerberem, explicitně s Kerberos cache.
             # auth_protocol="negotiate" automaticky vyjedná NTLMv2 nebo Kerberos.
-            smbclient.register_session(host, auth_protocol="negotiate", ccache="/tmp/krb5cc_1000")
+            os.environ["KRB5CCNAME"] = "FILE:/tmp/krb5cc_1000" # Nastavení ccache přes proměnnou prostředí
+            smbclient.register_session(host, auth_protocol="negotiate")
         except smbclient.exceptions.SMBException as e:
             print(f"[DEBUG] Chyba při registraci SMB session pro {host}: {e}")
         except Exception as e:
@@ -182,7 +183,8 @@ def verify_paths(req: VerifyRequest):
                 
                 # Extrakce hosta pro registraci session
                 host = uri.split("/")[2]
-                smbclient.register_session(host, auth_protocol="negotiate", ccache="/tmp/krb5cc_1000")
+                os.environ["KRB5CCNAME"] = "FILE:/tmp/krb5cc_1000" # Nastavení ccache přes proměnnou prostředí
+                smbclient.register_session(host, auth_protocol="negotiate")
                 
                 # Validace přes stat
                 stat_res = smbclient.stat(uri)
