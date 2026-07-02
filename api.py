@@ -58,26 +58,22 @@ def init_smb_session_for_path(unc_path):
     if not HAS_SMBCLIENT:
         return
     # Pokud jsou v env zadané přihlašovací údaje, zaregistrujeme je pro daný server
-    username = os.getenv("SMB_USERNAME")
-    password = os.getenv("SMB_PASSWORD")
-    if username:
-        # Extrahujeme hosta
-        norm = unc_path.replace("\\", "/")
-        parts = [p for p in norm.split("/") if p]
-        # Host je první část UNC cesty, např. 'herkules.axinetwork.loc'
-        if parts:
-            host = parts[0]
-            try:
-                # Zaregistrujeme session pro daný host, pokud ještě neexistuje
-                # auth_protocol="negotiate" automaticky vyjedná NTLMv2 nebo Kerberos
-                smbclient.register_session(host, username=username, password=password, auth_protocol="negotiate")
-            except smbclient.exceptions.SMBException as e:
-                # Ignorujeme chybu, pokud session již existuje nebo je problém s auth (např. Kerberos ticket vypršel)
-                # smbclient se pokusí znovu vyjednat při dalším požadavku, pokud auth selže.
-                # Toto je kritické pro Kerberos, kde ticket může vypršet a smbclient se jej pokusí obnovit.
-                print(f"[DEBUG] Chyba při registraci SMB session pro {host}: {e}")
-            except Exception as e:
-                print(f"[ERROR] Neočekávaná chyba při registraci SMB session pro {host}: {e}")
+    # Odebereme username a password z registrace session, protože se spoléháme na Kerberos lístek z OS.
+    # Dále, session by měla být registrována pouze pro hosta, nikoli pro celou UNC cestu.
+    # Extrahujeme hosta z unc_path
+    norm = unc_path.replace("\\", "/")
+    parts = [p for p in norm.split("/") if p]
+    if parts:
+        host = parts[0]
+        try:
+            # Registrace session pouze pro hosta s Kerberem
+            # auth_protocol="negotiate" automaticky vyjedná NTLMv2 nebo Kerberos.
+            smbclient.register_session(host, auth_protocol="negotiate")
+        except smbclient.exceptions.SMBException as e:
+            print(f"[DEBUG] Chyba při registraci SMB session pro {host}: {e}")
+        except Exception as e:
+            print(f"[ERROR] Neočekávaná chyba při registraci SMB session pro {host}: {e}")
+
 
 
 
