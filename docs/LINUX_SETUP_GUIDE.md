@@ -1,105 +1,153 @@
-# Průvodce nastavením Linux serveru pro Dynamic File Server Mount
+# Průvodce nastavením Linux serveru pro User-Space SMB (gMSA & Kerberos)
 
-Tento dokument popisuje manuální kroky, které je nutné provést na cílovém Linuxovém serveru, aby bylo možné dynamicky připojovat síťové složky z Windows File Serveru přes webové rozhraní AXIMA RAG asistenta.
-
----
-
-## 1. Vytvoření servisního účtu Active Directory
-
-Na vašem Windows Domain Controlleru (nebo jiném stroji s RSAT) vytvořte dedikovaný servisní účet pro přístup k souborovým serverům. Tento účet bude použit pro montování SMB/CIFS sdílených složek.
-
-- **Příklad názvu:** `svc-rag-reader`
-- **Oprávnění:** Udělte tomuto účtu striktně **Read-Only** oprávnění (čtení obsahu složek a čtení NTFS ACL) na všech sdílených složkách, které má RAG asistent indexovat.
+Tento dokument popisuje kroky, které je nutné provést na cílovém Linuxovém serveru, aby bylo možné bezpečně přistupovat k síťovým složkám z Windows File Serveru přímo v Python aplikaci (User Space) s využitím Group Managed Service Account (gMSA) a Kerberos ověřování.
 
 ---
 
-## 2. Instalace `cifs-utils` na Linux serveru
+## 1. Příprava gMSA účtu v Active Directory
 
-Nástroje pro práci se souborovými systémy CIFS (Common Internet File System), které jsou potřeba pro montování Windows sdílených složek.
+Na Windows Domain Controlleru (nebo stroji s RSAT) vytvořte nebo nakonfigurujte gMSA účet:
 
+- **Příklad názvu:** `svc-rag-reader$`
+- **Oprávnění:** Udělte tomuto účtu striktně **Read-Only** oprávnění (čtení obsahu složek a čtení NTFS ACL) na sdílených složkách, které má RAG asistent indexovat.
+- **Povolení pro Linux hostitele:** Ujistěte se, že počítačový účet Linuxového serveru má oprávnění získat heslo pro tento gMSA účet (`Get-ADServiceAccount`).
+
+---
+
+## 2. Instalace závislostí na Linux serveru
+
+Pro podporu protokolu SMBv3 a Kerberos ověřování nainstalujte potřebné systémové balíky a Python knihovny:
+
+### Systémové balíky
 ```bash
 sudo apt update
-sudo apt install -y cifs-utils
+sudo apt install -y krb5-user libkrb5-dev devscripts gcc python3-dev
+```
+Během instalace `krb5-user` budete vyzváni k zadání výchozího Kerberos realmu (např. `VASEDOMENA.LOCAL`).
+
+### Python knihovny v prostředí aplikace
+Nainstalujte požadované Python knihovny do virtuálního prostředí vaší FastAPI aplikace:
+```bash
+pip install smbprotocol smbclient gssapi
 ```
 
 ---
 
-## 3. Vytvoření adresáře pro credentials a souboru `.smbcredentials`
+## 3. Konfigurace Kerbera (`/etc/krb5.conf`)
 
-Vytvořte bezpečný adresář a soubor, kam se uloží přihlašovací údaje k servisnímu účtu AD. Tyto údaje jsou citlivé a musí být chráněny.
+Otevřete konfiguraci Kerbera a ujistěte se, že správně ukazuje na vaše Active Directory doménové řadiče (KDC):
+
+```bash
+sudo nano /etc/krb5.conf
+```
+
+Příklad konfigurace:
+```ini
+[libdefaults]
+    default_realm = VASEDOMENA.LOCAL
+    dns_lookup_realm = false
+    dns_lookup_kdc = true
+
+[realms]
+    VASEDOMENA.LOCAL = {
+        kdc = dc1.vasedomena.local
+        kdc = dc2.vasedomena.local
+        admin_server = dc1.vasedomena.local
+    }
+
+[domain_realm]
+    .vasedomena.local = VASEDOMENA.LOCAL
+    vasedomena.local = VASEDOMENA.LOCAL
+```
+
+---
+
+## 4. Generování a ochrana Kerberos Keytabu (Kritické z hlediska bezpečnosti)
+
+Keytab soubor obsahuje kryptografické klíče gMSA účtu a funguje jako ekvivalent hesla. **Musí být chráněn před neoprávněným čtením.**
+
+### Generování keytabu na AD (přes ktpass) nebo přímo na Linuxu
+Na Windows Domain Controlleru vygenerujte keytab soubor pro gMSA účet:
+```cmd
+ktpass /out svc-rag-reader.keytab /princ svc-rag-reader$@VASEDOMENA.LOCAL /mapuser svc-rag-reader$ /crypto AES256-SHA1 /ptype KRB5_NT_PRINCIPAL -pass +
+```
+*(Upozornění: gMSA rotuje své heslo automaticky, přepínač `-pass +` vygeneruje náhodné heslo spojené s účtem).*
+
+### Bezpečné umístění a nastavení práv na Linuxu
+Přeneste soubor `svc-rag-reader.keytab` na Linux server a umístěte jej do dedikované složky `/etc/rag/`.
+
+**Nastavení striktních přístupových práv (ISO 27001):**
+Keytab nesmí být čitelný nikým jiným než spouštěcím uživatelem FastAPI aplikace (např. `rag-user`).
 
 ```bash
 sudo mkdir -p /etc/rag
-sudo touch /etc/rag/.smbcredentials
-sudo chmod 600 /etc/rag/.smbcredentials
-sudo chown root:root /etc/rag/.smbcredentials
+sudo mv svc-rag-reader.keytab /etc/rag/
+sudo chown rag-user:rag-user /etc/rag/svc-rag-reader.keytab
+sudo chmod 400 /etc/rag/svc-rag-reader.keytab
 ```
 
-**Editace souboru `/etc/rag/.smbcredentials`:**
-Otevřete soubor v textovém editoru (např. `nano` nebo `vim`) a vložte do něj následující obsah. Nahraďte zástupné hodnoty za skutečné údaje vašeho servisního účtu.
+> **DŮLEŽITÉ:** Práva `400` garantují, že soubor může číst pouze vlastník `rag-user` a nikdo jiný na serveru k němu nemá přístup. Tím se předchází bezpečnostním incidentům a úniku pověření.
+
+---
+
+## 5. Odstranění staré konfigurace (Úklid)
+
+Jelikož přecházíme na čisté uživatelské řešení, je nutné odstranit staré zranitelné konfigurace z OS:
 
 ```bash
-sudo nano /etc/rag/.smbcredentials
+# 1. Smazání starého mount skriptu
+sudo rm -f /usr/local/bin/rag-mount-helper.sh
+
+# 2. Smazání delegování práv v sudoers
+sudo rm -f /etc/sudoers.d/rag-mount
+
+# 3. Odinstalace nepotřebných balíků (volitelně)
+sudo apt purge -y cifs-utils
 ```
 
-Obsah souboru by měl vypadat takto:
+---
+
+## 6. Automatická obnova Kerberos lístku (Systemd Service)
+
+Aby aplikace neztratila přístup k síťovým složkám po vypršení Kerberos ticketu (obvykle 10 hodin), vytvoříme jednoduchou systemd službu/timer pro periodické volání `kinit` na pozadí pod uživatelem `rag-user`.
+
+Vytvořte službu `/etc/systemd/system/rag-kinit.service`:
 ```ini
-username=svc-rag-reader
-password=VaseBezpecneHeslo123
-domain=VaseDomena.local
+[Unit]
+Description=Obnova Kerberos Ticketu pro RAG gMSA
+After=network.target
+
+[Service]
+Type=oneshot
+User=rag-user
+ExecStart=/usr/bin/kinit -kt /etc/rag/svc-rag-reader.keytab svc-rag-reader$@VASEDOMENA.LOCAL
 ```
 
----
+Vytvořte timer `/etc/systemd/system/rag-kinit.timer`:
+```ini
+[Unit]
+Description=Periodicka obnova Kerberos Ticketu pro RAG
 
-## 4. Deploy Helper Skriptu `rag-mount-helper.sh`
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=4h
 
-Zkopírujte připravený helper skript `rag-mount-helper.sh` (který byste měli mít lokálně v repozitáři) do systémové cesty a nastavte mu spustitelná práva.
+[Install]
+WantedBy=timers.target
+```
 
+Aktivujte timer:
 ```bash
-sudo cp rag-mount-helper.sh /usr/local/bin/rag-mount-helper.sh
-sudo chmod +x /usr/local/bin/rag-mount-helper.sh
-```
-
----
-
-## 5. Konfigurace `sudoers` pro delegování práv
-
-Nastavte `sudoers` tak, aby uživatel, pod kterým běží FastAPI aplikace (např. `rag-user`), mohl spouštět `rag-mount-helper.sh` bez hesla. Tím se umožní dynamické montování z webového rozhraní.
-
-```bash
-sudo visudo -f /etc/sudoers.d/rag-mount
-```
-
-Do otevřeného souboru vložte následující řádek:
-```sudoers
-rag-user ALL=(root) NOPASSWD: /usr/local/bin/rag-mount-helper.sh
-```
-
-> **DŮLEŽITÉ:** Nahraďte `rag-user` skutečným uživatelským jménem, pod kterým běží vaše FastAPI aplikace. Pokud aplikace běží pod `gunicorn` nebo `systemd` službou, zjistěte jejího systémového uživatele.
-
----
-
-## 6. Vytvoření kořenového adresáře pro mountpointy
-
-Vytvořte adresář, který bude sloužit jako kořen pro všechny dynamicky připojované sdílené složky.
-
-```bash
-sudo mkdir -p /mnt
+sudo systemctl daemon-reload
+sudo systemctl enable --now rag-kinit.timer
 ```
 
 ---
 
 ## 7. Restart FastAPI aplikace
 
-Po dokončení všech konfigurací restartujte FastAPI aplikaci, aby se načetly nové systémové konfigurace a skripty.
+Po dokončení konfigurace restartujte službu RAG asistenta, aby začala využívat novou pipeline bez OS závislostí:
 
 ```bash
-sudo systemctl restart <nazev_vasi_fastapi_sluzby>
-# Příklad: sudo systemctl restart axima-rag-api.service
+sudo systemctl restart axima-rag-api.service
 ```
-
----
-
-## 8. Ověření funkčnosti z Web UI
-
-Po restartu by mělo být možné v webovém rozhraní AXIMA RAG asistenta (záložka **Nastavení**) přidat UNC cestu (`\\server\share\cesta`) a po kliknutí na „Ověřit dostupnost cest“ by se složka měla automaticky připojit pod `/mnt` a její stav by se měl změnit na „Aktivní / Ověřeno“.

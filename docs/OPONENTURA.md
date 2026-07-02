@@ -62,7 +62,7 @@ Model **pracuje s našimi soubory a informacemi v nich** (přes RAG — dokument
 ## 3. Architektura řešení
 
 ```
-Síťové cesty (dynamicky mountované z web UI)
+Síťové cesty (čtené napřímo přes SMB)
 (\\fileserver\...)                Uživatel (autentizovaný)
         │  (reconciliation: mtime/size → hash jen změněných)
         ▼                                          │ dotaz + identita

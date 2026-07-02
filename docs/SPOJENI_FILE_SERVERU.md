@@ -1,6 +1,6 @@
-# Architektonický návrh propojení File Serveru a Linux Serveru
+# Architektonický návrh propojení File Serveru a Linux Serveru (User-Space SMB)
 
-Tento dokument detailně navrhuje řešení pro **dynamické a bezpečné připojování (mounting) síťových složek** z Windows File Serveru na Linuxový aplikační server (RAG asistent). Řešení umožňuje operátorovi konfigurovat síťové cesty (UNC formát) přímo ve webovém rozhraní, přičemž Linuxový backend se postará o jejich automatické namountování, ověření dostupnosti a zapojení do periodického skenovacího cyklu (reconciliation sken).
+Tento dokument detailně navrhuje řešení pro **dynamické a bezpečné připojování a čtení** síťových složek z Windows File Serveru do Linuxové aplikační aplikace (RAG asistent) nativně v uživatelském prostoru (User Space) bez nutnosti montování na úrovni operačního systému.
 
 ---
 
@@ -17,21 +17,15 @@ Tento dokument detailně navrhuje řešení pro **dynamické a bezpečné připo
  │                        FastAPI Backend (api.py)                        │
  └───────┬──────────────────────────┬───────────────────────────────┬─────┘
          │                          │                               │
-         │ 1. Uloží cestu do DB     │ 2. Zavolá Mount Manager       │ 3. Spustí sken
+         │ 1. Uloží cestu do DB     │ 2. Ověří cestu přes SMB       │ 3. Spustí sken
          ▼                          ▼                               ▼
  ┌───────────────┐          ┌───────────────┐               ┌───────────────┐
- │ SQL Server 19 │          │ Mount Manager │               │  Reconciler   │
- │ (Konfigurace) │          │ (Python/Sudo) │               │   (Watchdog)  │
+ │ SQL Server 19 │          │   smbclient   │               │  Reconciler   │
+ │ (Konfigurace) │          │ (Python/User) │               │   (Skenování) │
  └───────────────┘          └───────┬───────┘               └───────┬───────┘
                                     │                               │
-                                    │ mount -t cifs                 │ čte lokální soubory
+                                    │ TCP 445 (SMBv3)               │ Čte soubory přes SMB
                                     ▼                               ▼
-                     ┌───────────────────────────────┐              │
-                     │ Linux Mountpoint (/mnt/...)  ◄───────────────┘
-                     └──────────────┬────────────────┘
-                                    │
-                                    │ SMB2.1/3.0 protokoly
-                                    ▼
  ┌────────────────────────────────────────────────────────────────────────┐
  │                    Windows Active Directory File Server                │
  └────────────────────────────────────────────────────────────────────────┘
@@ -39,175 +33,83 @@ Tento dokument detailně navrhuje řešení pro **dynamické a bezpečné připo
 
 ### Hlavní principy řešení:
 1. **Jedno rozhraní (Single Source of Truth):** Operátor zadá Windows UNC cestu (např. `\\herkules\public\smernice`) ve webovém prohlížeči. Cesta se uloží do SQL Serveru.
-2. **Dynamic Mounting Daemon / Service (Mount Manager):** Linuxový backend zachytí změnu konfigurace, přeloží UNC cestu na lokální cestu (např. `/mnt/herkules/public/smernice`) a zajistí bezpečné namountování přes `mount -t cifs`.
-3. **Reconciliation Sken:** Jakmile je složka úspěšně namountována, watchdog (`watchdog_service.py`) k ní přistupuje jako k lokálnímu adresáři a periodicky (např. každých 15 minut) porovnává stav (velikost, `mtime`, hash, ACL) se stavem uloženým v DB.
+2. **Uživatelský SMB Klient:** Linuxový backend nepoužívá `cifs-utils` ani nepotřebuje práva `root` pro montování disků. Místo toho se připojuje k Windows File Serveru jako standardní síťový klient pomocí čistě pythonovské knihovny `smbclient` (nad `smbprotocol`).
+3. **Dočasné stahování souborů pro analýzu (Temporary Directory):** Knihovny pro analýzu dokumentů (`pdfplumber`, `python-docx`, `openpyxl`) vyžadují lokální přístup k souborům. Abychom předešli bezpečnostnímu riziku ponechání citlivých dat v `/tmp` při chybě nebo pádu aplikace, soubory se stahují do kontextem řízeného dočasného adresáře (`tempfile.TemporaryDirectory()`), který garantuje smazání celého obsahu i při neočekávaných haváriích.
+4. **Reconciliation Sken:** Watchdog na úrovni `inotify` je pro síťové cesty nespolehlivý. Systém proto využívá periodické (např. každých 15 minut) procházení struktury přes `smbclient.walk()`, porovnává změny (velikost, `mtime` a hash ACL) s DB a zpracovává pouze modifikované nebo nové dokumenty.
 
 ---
 
-## 2. Technické řešení dynamic mountu na Linuxu
+## 2. Výhody User-Space řešení oproti OS Mountu
 
-Linux běžně vyžaduje práva `root` pro připojování souborových systémů. Aby mohl backend běžící pod neprivilegovaným uživatelem (např. `rag-user`) dynamicky provádět mount, navrhujeme tři možné přístupy. Doporučujeme **Přístup A (Mount Manager s helper skriptem pod Sudo)**, protože poskytuje plnou programovou kontrolu a okamžitou odezvu v UI bez závislosti na vnějších daemonech typu autofs.
-
-### Přístup A: Programový Mount Manager s delegovaným `sudo` (Doporučeno)
-
-Backend (FastAPI) spouští dedikovaný Python subsystém `MountManager`, který volá bezpečný shell skript nebo příkaz přes `sudo` s přesně vymezeným rozsahem oprávnění v `/etc/sudoers`.
-
-#### 1. Konfigurace sudoers (`/etc/sudoers.d/rag-mount`)
-Chrání systém před spuštěním libovolného příkazu. Povoluje pouze specifický montážní helper:
-```sudoers
-rag-user ALL=(root) NOPASSWD: /usr/local/bin/rag-mount-helper.sh
-```
-
-#### 2. Bezpečný Helper Skript (`/usr/local/bin/rag-mount-helper.sh`)
-Skript validuje vstupy a bezpečně volá `mount` se správnými parametry pro SMB/CIFS a integrací do Active Directory.
-```bash
-#!/bin/bash
-set -euo pipefail
-
-# Validace vstupů
-ACTION=$1      # mount / umount
-UNC_PATH=$2    # \\server\share
-LOCAL_DIR=$3   # /mnt/server/share
-
-if [[ ! "$LOCAL_DIR" =~ ^/mnt/ ]]; then
-    echo "Chyba: Cesta musí začínat na /mnt/" >&2
-    exit 1
-fi
-
-# Převod zpětných lomítek na dopředná pro Linux cifs helper
-SMB_SOURCE=$(echo "$UNC_PATH" | tr '\\' '/')
-
-if [ "$ACTION" = "mount" ]; then
-    # Vytvoření adresáře pokud neexistuje
-    mkdir -p "$LOCAL_DIR"
-    
-    # Kontrola, zda již není namountováno
-    if mountpoint -q "$LOCAL_DIR"; then
-        echo "Již namountováno"
-        exit 0
-    fi
-    
-    # Mount s využitím bezpečně uložených přihlašovacích údajů
-    # Používáme SMB v3, read-only přístup (RAG asistent data nemění), mapování práv na rag-user
-    mount -t cifs "$SMB_SOURCE" "$LOCAL_DIR" \
-        -o credentials=/etc/rag/.smbcredentials,ro,nosuid,nodev,noexec,iocharset=utf8,vers=3.0,uid=rag-user,gid=rag-user
-        
-    echo "Mount úspěšný"
-
-elif [ "$ACTION" = "umount" ]; then
-    if mountpoint -q "$LOCAL_DIR"; then
-        umount -l "$LOCAL_DIR"
-        rmdir "$LOCAL_DIR" || true
-        echo "Umount úspěšný"
-    else
-        echo "Není namountováno"
-    fi
-fi
-```
-
-### Přístup B: Systemd Automount (Alternativa pro statické sdílené disky)
-Pokud by se cesty měnily jen zřídka, lze generovat `.mount` a `.automount` soubory do `/etc/systemd/system/`. Systemd se pak postará o připojení disku až v okamžiku, kdy do něj poprvé přistoupí `watchdog_service.py` (on-demand mounting).
+| Vlastnost | OS-Level Mount (`cifs-utils`) | User-Space SMB (`smbclient`) |
+|---|---|---|
+| **Oprávnění systému** | Vyžaduje `root` práva (přes `sudoers`) | Běží pod neprivilegovaným uživatelem (`rag-user`) |
+| **Bezpečnost** | Riziko Privilege Escalation přes helper skript | Maximální izolace, nulové navýšení systémových práv |
+| **Stabilita při výpadku** | OS se zablokuje ve stavu "stale file handle" (I/O freeze) | Vyhodí standardní Python výjimku (rychlý fail/recovery) |
+| **gMSA kompatibilita** | Složitá integrace přes Kerberos keytab v OS | Čistá integrace s Kerberos tokeny v rámci Python relace |
+| **Zbytková data** | Soubory jsou trvale vystaveny v `/mnt/...` | Soubory se stáhnou na zlomek sekundy do `/tmp` a smažou se |
 
 ---
 
-## 3. Správa přístupových údajů (Credentials)
+## 3. Práce s UNC cestou a Ingest Pipeline
 
-Připojení k Windows File Serveru v podnikovém prostředí vyžaduje doménový účet (Active Directory). Pro zajištění bezpečnosti nesmí přihlašovací údaje procházet přes UI a nesmí být uloženy v otevřeném textu v DB.
-
-### Řešení: Doménový Service Account
-1. V AD se vytvoří dedikovaný servisní účet (např. `svc-rag-reader@domain.local`).
-2. Účtu se na File Serveru přidělí striktně **Read-Only** oprávnění (čtení obsahu složek a čtení NTFS ACL).
-3. Přihlašovací údaje se bezpečně uloží přímo na Linuxovém serveru do souboru `/etc/rag/.smbcredentials` chráněného právy `chown root:root` a `chmod 600`:
-   ```ini
-   username=svc-rag-reader
-   password=BezpecneHeslo123
-   domain=domain.local
-   ```
-4. Linuxový jádrový CIFS klient použije tyto údaje při sestavování SMB session. RAG asistent tak má garantovaný zabezpečený přístup.
-
----
-
-## 4. Překlad cest: Windows UNC ↔ Linux Mountpoint
-
-Uživatelé v AXIMA pracují ve Windows a znají cesty jako `\\herkules\public\smernice`. Linuxový backend však potřebuje lokální cestu.
-
-Navrhujeme kanonický mapovací algoritmus (který je již částečně přítomen v `api.py` pod `unc_to_local`):
-1. **Normalizace lomítek:** `\\herkules\public\smernice` → `//herkules/public/smernice`
-2. **Sestavení lokálního mountpointu:** Pod kořenem `/mnt` (lze konfigurovat přes `.env` jako `UNC_MOUNT_ROOT`) se vytvoří cesta z hostu a názvu sdílené složky:
-   - `\\herkules\public\smernice` → `/mnt/herkules/public/smernice`
-3. **Rozlišení Share vs Podadresář:** Mount se provádí vždy na úrovni **Share** (`\\herkules\public`). Podadresáře (`smernice`) se již nemountují samostatně, jsou automaticky přístupné uvnitř namountovaného share.
-   - *Příklad:*
-     - Vstup: `\\herkules\public\it-postupy\pdf`
-     - Detekovaný SMB Share: `\\herkules\public` (namountuje se do `/mnt/herkules/public`)
-     - Cesta pro sken: `/mnt/herkules/public/it-postupy/pdf`
-
----
-
-## 5. Implementace v FastAPI Backend (`api.py`)
-
-Zde je konkrétní návrh integrace do API. Endpoint `/api/verify` se rozšíří tak, aby kromě pouhého ověření přítomnosti složky na disku dokázal vyvolat pokus o automatický mount, pokud složka ještě není namountovaná.
-
-### Rozšířený `/api/verify` v `api.py`
+Kanonický proces zpracování souboru ze síťové složky:
 
 ```python
-# Předpokládá se existence funkcí parse_unc, unc_to_local a ensure_mounted z `api.py`
-# Dále, MOUNT_ROOT je definován v api.py
+import os
+import tempfile
+from smbclient import open_file as smb_open
 
-@app.post("/api/verify")
-def verify_paths(req: VerifyRequest):
-    """Ověří platnost/dostupnost cest ze strany serveru (os.path.isdir).
-    Zajišťuje automatické namountování přes cifs a vrací [{path, ok, resolved, error}]."""
-    results = []
-    for p in req.paths:
-        try:
-            # Zajistíme dynamic mount na Linuxu (na Windows vrací přímo lokální/UNC cestu)
-            local = ensure_mounted(p)
-            ok = os.path.isdir(local) and os.access(local, os.R_OK)
-            error_msg = None
-        except Exception as e:
-            local = None
-            ok = False
-            error_msg = str(e)
+def process_remote_file(unc_path):
+    """
+    Bezpečné stažení vzdáleného souboru do izolovaného dočasného adresáře
+    a jeho následná analýza.
+    """
+    # TemporaryDirectory se postará o úklid automaticky i při kritické výjimce (OOM, pád)
+    with tempfile.TemporaryDirectory(prefix="rag_ingest_") as temp_dir:
+        # Extrakce názvu souboru pro zachování správné přípony pro parsery
+        local_filename = os.path.basename(unc_path.replace('\\', '/'))
+        tmp_path = os.path.join(temp_dir, local_filename)
+        
+        # Streamování dat z Windows File Serveru přímo do dočasného lokálního souboru
+        with smb_open(unc_path, "rb") as remote_f, open(tmp_path, "wb") as local_f:
+            local_f.write(remote_f.read())
             
-        results.append({
-            "path": p, 
-            "ok": ok, 
-            "resolved": local,
-            "error": error_msg
-        })
-    return results
+        # Bezpečná analýza lokálního souboru
+        text = extract_text(tmp_path)
+        
+    # temp_dir je nyní automaticky smazán z disku
+    return text
 ```
 
-**Manuální kroky pro nastavení Linux serveru:**
-Podrobné kroky pro přípravu Linux serveru (instalace `cifs-utils`, konfigurace `sudoers`, vytvoření `.smbcredentials` a deploy `rag-mount-helper.sh`) jsou popsány v dokumentu **[docs/LINUX_SETUP_GUIDE.md](LINUX_SETUP_GUIDE.md)**. Tyto kroky musí provést administrátor s přístupem k cílovému Linuxovému serveru.
+---
+
+## 4. Správa přístupových údajů a Integrace Active Directory
+
+Systém plně podporuje integraci do podnikového prostředí Active Directory.
+
+### Možnost A: Doménový gMSA účet (Doporučeno pro produkci)
+1. Pro RAG asistenta je vytvořen **Group Managed Service Account** (např. `svc-rag-reader$`), který nemá statické heslo.
+2. Na Linux serveru se zprovozní Kerberos klient (`krb5-user`, `libkrb5-dev`).
+3. Vygeneruje se `.keytab` soubor pro tento gMSA účet s přísným oprávněním (viz [LINUX_SETUP_GUIDE.md](LINUX_SETUP_GUIDE.md)).
+4. Python knihovna `smbprotocol` využije Kerberos lístek pro automatické bezpečné ověření bez nutnosti ukládání jakéhokoliv hesla.
+
+### Možnost B: Standardní servisní účet (Dev / Staging)
+1. Přihlašovací údaje (uživatelské jméno a heslo) jsou předány FastAPI aplikaci bezpečně pomocí **proměnných prostředí** v konfiguraci Systemd služby (nikdy v textovém souboru nebo DB).
+2. Inicializace relace se provádí při startu aplikace:
+   ```python
+   import smbclient
+   smbclient.register_session(
+       "fileserver.vasedomena.local", 
+       username=os.getenv("SMB_USERNAME"), 
+       password=os.getenv("SMB_PASSWORD")
+   )
+   ```
 
 ---
 
-## 6. Integrace do Web UI (`web/index.html`)
+## 5. Zajištění souladu s ISO 27001 a GDPR
 
-Webové rozhraní na záložce **Nastavení** již obsahuje seznam cest. Navržené propojení přináší tyto změny do UI:
-1. **Ověření a Mount:** Kliknutím na tlačítko „Ověřit dostupnost cest“ odešle UI seznam nakonfigurovaných UNC cest na `/api/verify`. Backend se pokusí o mount. Pokud uspěje, UI změní stav cesty na **Zelený (Aktivní / Ověřeno)**.
-2. **Detailní chyby v terminálu Nastavení:** Pokud mount selže (např. neplatné přihlašovací údaje v `/etc/rag/.smbcredentials` nebo nedostupný File Server), vrátí backend podrobnou chybu (např. *Permission Denied*, *Host Unreachable*), kterou UI vypíše do integrovaného diagnostického terminálu na záložce Nastavení. Tím operátor ihned ví, kde je problém.
-
----
-
-## 7. Bezpečnostní opatření (ISO 27001 / NIS2)
-
-Integrace síťového file serveru s lokálním RAG asistentem představuje bezpečnostní výzvy, které toto řešení striktně adresuje:
-
-1. **Striktní Read-Only přístup:** Mount je realizován s parametrem `ro`. RAG asistent nemůže na File Serveru nic měnit, smazat, ani tam zanést ransomware.
-2. **Izolace práv na Linuxu:** Namountovaný share má nastavená Linuxová práva pro vlastníka a skupinu `rag-user:rag-user` a masku, která neumožňuje ostatním lokálním uživatelům na serveru číst tyto soubory (ochrana před lokálním únikem dat).
-3. **Indexace a filtrace ACL:** Jak je definováno v oponentuře v3 (rozhodnutí 10 a 15), RAG asistent při skenování souborů načte i jejich **NTFS bezpečnostní deskriptory (ACL)**. Tyto informace (které AD skupiny mají k souboru přístup) se uloží jako payload k vektorům do Qdrantu. Při dotazu uživatele v chatu se zjišťuje jeho tranzitivní členství v AD skupinách a vyhledávací dotaz do Qdrantu se předem vyfiltruje tak, aby uživatel mohl dostat odpovědi pouze z dokumentů, ke kterým má reálně ve Windows přístup.
-4. **Zamezení Shell Injection:** Volání externích příkazů je ošetřeno — nepoužívá se `shell=True`, argumenty jsou předávány jako pole a vstupní cesty jsou striktně validovány regulárními výrazy.
-
----
-
-## 8. Plán nasazení a ověření (Success Criteria)
-
-Kroky pro úspěšné zprovoznění na cílovém prostředí:
-
-1. **Příprava AD účtu:** Vytvoření doménového účtu `svc-rag-reader` a nastavení oprávnění na File Serveru.
-2. **Instalace cifs-utils:** Na Linux serveru nainstalovat balík pro podporu SMB (`sudo apt install cifs-utils`).
-3. **Uložení credentials:** Vytvoření souboru `/etc/rag/.smbcredentials` a nastavení bezpečné masky (`chmod 600`).
-4. **Deploy Sudo helperu:** Nasazení helper skriptu do `/usr/local/bin` a konfigurace `/etc/sudoers.d/rag-mount`.
-5. **Ověření z UI:** Přidání testovací UNC cesty ve webovém rozhraní, kliknutí na „Ověřit dostupnost cest“ a ověření, že se složka automaticky připojila pod `/mnt` a její stav zezelenal.
+1. **Žádná trvalá kopie dat na Linuxu:** Dokumenty jsou staženy do `/tmp/rag_ingest_...` pouze po dobu nezbytně nutnou ke zpracování (milisekundy až sekundy) a poté jsou okamžitě zničeny.
+2. **Zamezení úniku dat přes lokální uživatele:** Dočasné adresáře v Pythonu se vytvářejí s výchozí maskou `0700` (přístupné pouze pro spouštěcího uživatele `rag-user`). Žádný jiný lokální uživatel na serveru do nich nemůže nahlédnout.
+3. **Indexace NTFS ACL za běhu:** Aby nedošlo ke zploštění přístupových práv (RAG by neměl vracet odpovědi z dokumentů, na které uživatel nemá právo), při procházení síťových cest načítá backend také bezpečnostní ACL deskriptory, ukládá je do Qdrantu a dotazy uživatelů za běhu filtruje podle jejich tranzitivního doménového členství.
