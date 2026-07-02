@@ -172,10 +172,13 @@ def verify_paths(req: VerifyRequest):
                 # Uživatelské SMB ověření na Linuxu
                 if not HAS_SMBCLIENT:
                     raise ImportError("Knihovna 'smbclient' není nainstalována na serveru.")
+                # Před ověřením existence se pokusíme o inicializaci SMB relace
                 init_smb_session_for_path(p)
                 # Ověříme existenci složky přes smbclient
+                # smbclient.stat by měl fungovat na cestách, které jsou UNC sdílené složky
+                # a měl by správně rozpoznat, zda se jedná o adresář
                 stat_res = smbclient.stat(p)
-                # 16 = FILE_ATTRIBUTE_DIRECTORY v SMB protokolu
+                # Kontrola FILE_ATTRIBUTE_DIRECTORY (hodnota 16 v SMB protokolu) pro ověření, že jde o adresář
                 ok = bool(stat_res.file_attributes & 16)
             else:
                 # Standardní lokální nebo Windows UNC cesta
