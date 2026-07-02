@@ -75,7 +75,7 @@ python3 api.py                  # ve druhém → http://SERVER:8000
 
 `web/index.html` servíruje `api.py` na `/` (samostatný soubor, bez frameworku, **AXIMA logo** v hlavičce). Záložky:
 
-- **Asistent** — chat proti `POST /ask`; při nedostupném backendu ukázkový režim.
+- **Asistent** — **streamovaný chat** s historií konverzace a podporou Markdownu (`POST /ask`); při nedostupném backendu ukázkový režim. Uživatel může generování kdykoli **zastavit**.
 - **Nastavení** — správa **hlídaných cest** (přidat/odebrat, podadresáře, přípony, aktivní) + **Stav skenování** (běh/nečinnost, poslední/příští sken, „Skenovat teď", per-cesta počet dokumentů/bloků a čerstvost) + model/teplota/počet bloků. *Cesty spravuje operátor bez zásahu IT.*
 - **Dokumentace** — plnohodnotná dokumentace **uvnitř aplikace** (boční menu + články: O aplikaci, Jak to funguje, Jak se ptát, Cesty a skenování, Bezpečnost) ve firemním designu, **bez odkazů na git či soubory**.
 - **Manažerský výstup** — netechnický přehled + **tisknutelný přehled rozsahu** báze (s **AXIMA logem** v hlavičce tisku). Tisk je vždy ve světlém režimu.

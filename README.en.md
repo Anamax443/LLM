@@ -59,7 +59,7 @@ python3 api.py                  # terminal 2 → http://SERVER:8000
 
 `web/index.html` is served by `api.py` at `/` (single self-contained file, no framework, **AXIMA logo** in the header). Tabs:
 
-- **Assistant** — chat against `POST /ask`; sample mode when the backend is down.
+- **Assistant** — **streamed chat** with conversation history and Markdown support (`POST /ask`); sample mode when the backend is down. The user can **stop** generation at any time.
 - **Settings** — manage **watched paths** (add/remove, subfolders, extensions, active) + **Scan status** (idle/running, last/next scan, "Scan now", per-path document/block counts and freshness) + model/temperature/block count. *Paths are managed by the operator without IT.*
 - **Documentation** — full documentation **inside the app** (side menu + articles: About, How it works, How to ask, Paths & scanning, Security) in corporate design, **no git/filesystem links**.
 - **Management report** — non-technical overview + **printable scope overview** (with the **AXIMA logo** in the print header). Printing is always in light mode.
