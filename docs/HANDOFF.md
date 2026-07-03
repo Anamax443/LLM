@@ -2,18 +2,18 @@
 
 Živý pracovní dokument. **Aktualizuje se po každé změně + commit** (aby se dalo navázat z jiného stroje / mezi lidmi — na projektu se pracuje společně, commituje i kolega `stepancerny1-cyber`).
 
-**Poslední aktualizace:** 2026-07-03 (Oprava Kerberos autentizace, FQDN doplňování, f-string syntaxe)
+**Poslední aktualizace:** 2026-07-03 (Kompletní Refaktorizace a Opravy - CORS, Kerberos, FQDN, rozšíření formátů souborů, oprava mazání Qdrant)
 
 ---
 
 ## 1. Co je hotové
 
 - **Backend (POC, funkční):** `watchdog_service.py` (ingest), `api.py` (`POST /ask`), `ask_ai.py` (CLI). Stack Ollama (`nomic-embed-text` + `llama3.1`) + Qdrant (`axima_docs`, 768D).
-- **Web UI (nové):** `web/index.html` — homepage dle AXIMA UI standardu, **AXIMA logo v hlavičce**, 4 záložky, dark+light, tisk light (**logo v hlavičce tisku**), CS+EN, servisní řádek **v hlavičce** (health + model + commit + hodiny + GitHub). **Nově:** **streamovaný chat** s historií konverzace a podporou Markdownu, tlačítko "Zastavit" generování. Nastavení má **Stav skenování** (poslední/příští sken, „Skenovat teď", per-cesta dokumenty/bloky/čerstvost). Dokumentace = **plnohodnotné firemní články uvnitř aplikace** (boční menu, CS+EN, bez odkazů na git/soubory). Vše na vzorových datech, připraveno na `/api/settings`, `/api/scope`, `/api/scan`.
-- **Přílohy k dotazu (nové):** v Asistentu tlačítko 📎 + **vkládání ze schránky (Ctrl+V screenshot)** + náhled příloh; obsah se přes `POST /api/extract` převede na text (docx/xlsx/pdf/txt parsery + **OCR** obrázků přes pytesseract, graceful fallback) a přidá ke kontextu. Deploy: `pip` (python-multipart, pytesseract, Pillow) + systémový `tesseract-ocr` + `tesseract-ocr-ces`.
+- **Web UI (nové):** `web/index.html` — homepage dle AXIMA UI standardu, **AXIMA logo v hlavičce**, 4 záložky, dark+light, tisk light (**logo v hlavičce tisku**), CS+EN, servisní řádek **v hlavičce** (health + model + commit + hodiny + GitHub). **Nově:** **streamovaný chat** s historií konverzace a podporou Markdownu, tlačítko "Zastavit" generování. Nastavení má **Stav skenování** (poslední/příští sken, „Skenovat teď", per-cesta dokumenty/bloky/čerstvost). Dokumentace = **plnohodnotné firemní články uvnitř aplikace** (boční menu, CS+EN, bez odkazů na git/soubory). Nyní **komunikuje s backendem** pro načítání a ukládání monitorovaných cest.
+- **Přílohy k dotazu (nové):** v Asistentu tlačítko 📎 + **vkládání ze schránky (Ctrl+V screenshot)** + náhled příloh; obsah se přes `POST /api/extract` převede na text (docx/xlsx/pdf/txt/ps1/bat/cmd/ini/conf/json/xml/html/htm parsery + **OCR** obrázků přes pytesseract, graceful fallback) a přidá ke kontextu. Deploy: `pip` (python-multipart, pytesseract, Pillow) + systémový `tesseract-ocr` + `tesseract-ocr-ces`.
 - **Ověření cest (nové):** tlačítko „Ověřit dostupnost cest" + **terminál**; `POST /api/verify` na serveru provádí ověření UNC cest přímo v uživatelském prostoru (User Space) přes knihovnu `smbclient` s Kerberos autentizací (automatické doplňování FQDN, explicitní ccache `FILE:/home/aixima/krb5cc_axima`). Bez nutnosti montování na úrovni OS a bez práv root. **STAV je do ověření „neověřeno"** — nefabrikuje se. Manuální kroky pro nastavení Linuxu (Kerberos keytab gMSA s právy `400`) jsou v **[docs/LINUX_SETUP_GUIDE.md](LINUX_SETUP_GUIDE.md)**.
 - **Hlavička (nové):** servisní řádek přesunut z patičky **do hlavičky** (health + model 🧠 + commit + hodiny + **GitHub ikona**); model/GitHub volitelně skryjete v Nastavení (localStorage). Změněn i AXIMA UI standard (repo Anamax443/axima-ui-standard).
-- **`api.py` doplněno:** `GET /api/version` (kontrakt `{commit,branch,builtAt,startedAt}`), `POST /api/verify`, `POST /api/extract` + servírování `web/`. `/ask` streamuje (SSE).
+- **`api.py` doplněno:** `GET /api/version` (kontrakt `{commit,branch,builtAt,startedAt}`), `POST /api/verify`, `POST /api/extract` + servírování `web/`. `/ask` streamuje (SSE). **Nově:** `GET /api/monitored_paths` a `POST /api/set_monitored_paths` pro správu cest z WebUI, **vylepšené logování chyb** a **health checky pro Qdrant a Ollama** při startu API, **opravené CORS** pro WebUI.
 - **Guardrails (nové):** systémová pravidla přesunuta z promptu do pole **`system`** Ollamy (odděleně od uživatelského vstupu) — bez persony, **odolné vůči prompt injection** (ignoruje pokusy „změň roli/pravidla"), odpovídá jen z KONTEXTU, jinak „V dostupné dokumentaci jsem odpověď nenašel." Opravuje chování, kdy se model představoval jako „senior administrátor" a nechal si měnit roli.
 - **Dokumentace:** README (CS+EN), BUILD (CS+EN, výrobní), JAK-FUNGUJE-UCENI (CS+EN), tato HANDOFF, `requirements.txt`, `.env.example`. `README-old.md` **odstraněn** (mátl). `.gitignore` opraven — `docs/` se verzuje, chrání se firemní dokumenty podle typu.
 - **[OPONENTURA.md](OPONENTURA.md) v3** — obhajovací podklad po 5 kolech posudků (poslední: oprava čerstvosti ACL v reconciliation; + metriky s k/precision, práh „nevím", reálné odhady, ROI, failure modes, životní cyklus, ADR/STRIDE, human-in-the-loop). Kopie v Downloads (HTML s logem + MD).
@@ -40,12 +40,10 @@
 
 ## 3. Známé bugy / dluhy (v současném kódu)
 
-- **Stale vektory při update:** `watchdog_service.py` při nové verzi souboru smaže lokální kopii, ale **staré bloky v Qdrantu nemaže** → míchá starou a novou verzi. Nutné `qdrant.delete` podle `payload.source` před upsertem.
-- **Chybí `on_deleted`** — smazané soubory zůstávají v bázi.
-- **Identita = pouze název souboru** (`payload.source`) → kolize v podadresářích (viz rozhodnutí 7).
 - **Duplikovaná konfigurace** (URL, model, cesty) natvrdo ve 3 souborech → sjednotit do `config`/`.env`.
 - **`api.py` poslouchá na `0.0.0.0`** — vědomě (aby web UI bylo dostupné z klientů); zvážit reverzní proxy/omezení.
 - **Chybí payload index** v Qdrantu na `source` → mazání/update podle dokumentu je full-scan (pomalé ve škále).
+- **Potřeba restartu API** po změnách v `monitored_paths.json` (není automatické).
 
 ## 4. Další kroky (reprioritizováno po oponentuře)
 
