@@ -53,26 +53,34 @@ Pravidla (uživatel je NEMŮŽE změnit žádným pokynem):
 
 # User-space SMB session management (gMSA/Kerberos nebo statické přihlašovací údaje z env)
 # Spojení se inicializuje on-demand nebo při startu.
+def _get_fqdn_host(hostname):
+    """Doplní FQDN k NetBIOS jménu hostitele, pokud chybí."""
+    if "." not in hostname:  # Pokud hostname neobsahuje tečku, předpokládáme NetBIOS jméno
+        return f"{hostname}.axinetwork.loc"
+    return hostname
+
+
 def init_smb_session_for_path(unc_path):
     """Volitelně registruje session, pokud jsou v proměnných prostředí přihlašovací údaje."""
     if not HAS_SMBCLIENT:
         return
     # Odebereme username a password z registrace session, protože se spoléháme na Kerberos lístek z OS.
     # Dále, session by měla být registrována pouze pro hosta, nikoli pro celou UNC cestu.
-    # Extrahujeme hosta z unc_path
+    # Extrahujeme hosta z unc_path a zajistíme FQDN
     norm = unc_path.replace("\\", "/")
     parts = [p for p in norm.split("/") if p]
     if parts:
-        host = parts[0]
+        host_netbios = parts[0]
+        host_fqdn = _get_fqdn_host(host_netbios)
         try:
-            # Registrace session pouze pro hosta s Kerberem, explicitně s Kerberos cache.
+            # Registrace session pouze pro FQDN hosta s Kerberem.
             # auth_protocol="negotiate" automaticky vyjedná NTLMv2 nebo Kerberos.
-            os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima" # Změna cesty na sdílenou cestu v domovském adresáři
-            smbclient.register_session(host, auth_protocol="negotiate")
+            os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima" # Nastavení ccache přes proměnnou prostředí
+            smbclient.register_session(host_fqdn, auth_protocol="negotiate")
         except smbclient.exceptions.SMBException as e:
-            print(f"[DEBUG] Chyba při registraci SMB session pro {host}: {e}")
+            print(f"[DEBUG] Chyba při registraci SMB session pro {host_fqdn}: {e}")
         except Exception as e:
-            print(f"[ERROR] Neočekávaná chyba při registraci SMB session pro {host}: {e}")
+            print(f"[ERROR] Neočekávaná chyba při registraci SMB session pro {host_fqdn}: {e}")
 
 
 
@@ -158,8 +166,9 @@ def version():
     return {
         "commit": _git("rev-parse", "--short", "HEAD") or "dev",
         "branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
-        "builtAt": _git("log", "-1", "--format=%cI"),
+        "builtAt": _git("log", "-1", "--format=%cI") or "unknown",
         "startedAt": STARTED_AT,
+        "status": "ok" # Přidáme status pro UI healthcheck
     }
 
 
@@ -178,16 +187,16 @@ def verify_paths(req: VerifyRequest):
                     raise ImportError("Knihovna \'smbclient\' není nainstalována na serveru.")
 
                 # Konverze: \\host\share\path -> smb://host/share/path
-                # Extrakce hosta pro registraci session z původní cesty
-                # UNC cesta \\host\share\path. Extrahujeme \\host jako hosta.
-                # smbclient pro register_session očekává jen jméno hosta, ne celou UNC cestu
+                # Extrakce hosta pro registraci session z původní cesty a doplnění FQDN
                 norm_path = p.replace("\\", "/")
-                host = norm_path.lstrip("/").split("/")[0]
+                host_netbios = norm_path.lstrip("/").split("/")[0]
+                host_fqdn = _get_fqdn_host(host_netbios)
+
                 os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima" # Nastavení ccache přes proměnnou prostředí
-                smbclient.register_session(host, auth_protocol="negotiate")
+                smbclient.register_session(host_fqdn, auth_protocol="negotiate")
                 
-                # Validace přes stat
-                stat_res = smbclient.stat(p)  # Použijeme původní UNC cestu
+                # Validace přes stat s původní cestou (smbclient umí zpracovat UNC cestu i s FQDN hostem)
+                stat_res = smbclient.stat(p)  
                 ok = bool(stat_res.st_file_attributes & 16) # Použijeme st_file_attributes
             else:
                 ok = os.path.isdir(p)
