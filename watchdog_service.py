@@ -206,10 +206,21 @@ def reconciliation_scan():
     new_manifest = {}
     
     # Načtení hlídaných cest (v produkci z SQL Serveru, zde z konfigurace/env)
-    # Pro účely dema podporujeme seznam definovaný v env nebo výchozí testovací složku
-    monitored_paths_raw = os.getenv("MONITORED_PATHS", "/data/llm-demo/watchdog/incoming")
-    monitored_paths = [p.strip() for p in monitored_paths_raw.split(",") if p.strip()]
-    
+    # Načtení hlídaných cest z FastAPI
+    try:
+        response = requests.get("http://localhost:8000/api/monitored_paths") # Předpokládáme, že FastAPI běží na tomto URL
+        response.raise_for_status() # Vyvolá HTTPError pro špatné odpovědi (4xx nebo 5xx)
+        monitored_paths = response.json()
+        print(f"[INFO] Načteno {len(monitored_paths)} monitorovaných cest z FastAPI.")
+    except requests.exceptions.ConnectionError:
+        print("[ERROR] Nepodařilo se připojit k FastAPI pro získání monitorovaných cest. Používám výchozí cesty z .env.")
+        monitored_paths_raw = os.getenv("MONITORED_PATHS", "/data/llm-demo/watchdog/incoming")
+        monitored_paths = [p.strip() for p in monitored_paths_raw.split(",") if p.strip()]
+    except Exception as e:
+        print(f"[ERROR] Chyba při načítání monitorovaných cest z FastAPI: {e}. Používám výchozí cesty z .env.")
+        monitored_paths_raw = os.getenv("MONITORED_PATHS", "/data/llm-demo/watchdog/incoming")
+        monitored_paths = [p.strip() for p in monitored_paths_raw.split(",") if p.strip()]
+
     for path in monitored_paths:
         if path.startswith("\\\\"):
             # UNC síťová cesta přes user-space SMB

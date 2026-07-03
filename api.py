@@ -211,6 +211,37 @@ def verify_paths(req: VerifyRequest):
     return results
 
 
+# Ukládání a načítání monitorovaných cest (pro ingestor)
+MONITORED_PATHS_FILE = "monitored_paths.json"
+
+def load_monitored_paths():
+    if os.path.exists(MONITORED_PATHS_FILE):
+        try:
+            with open(MONITORED_PATHS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def save_monitored_paths(paths):
+    try:
+        with open(MONITORED_PATHS_FILE, "w", encoding="utf-8") as f:
+            json.dump(paths, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"[ERROR] Nelze uložit monitorované cesty: {e}")
+
+
+@app.get("/api/monitored_paths")
+def get_monitored_paths_endpoint():
+    return load_monitored_paths()
+
+
+@app.post("/api/set_monitored_paths")
+def set_monitored_paths_endpoint(paths: list[str]):
+    save_monitored_paths(paths)
+    return {"status": "ok", "message": f"Uloženo {len(paths)} monitorovaných cest."}
+
+
 @app.post("/api/extract")
 async def extract_files(files: list[UploadFile] = File(...)):
     """Vytáhne text z příloh k dotazu: dokumenty přes parsery, obrázky/screenshoty
