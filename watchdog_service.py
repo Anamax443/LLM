@@ -230,92 +230,112 @@ def reconciliation_scan():
                 print(f"[WARN] Přeskočeno UNC '{path}': knihovna smbclient není k dispozici.")
                 continue
             
-                print(f"[SCAN] Skenuji SMB sdílenou složku: {path}")
+            _scan_smb_path(path, collection_name=COLLECTION_NAME, manifest=manifest, new_manifest=new_manifest)
+        else:
+            _scan_local_path(path, collection_name=COLLECTION_NAME, manifest=manifest, new_manifest=new_manifest)
+
+    # Detekce smazaných souborů a pročištění Qdrantu
+    for old_file_key in list(manifest.keys()):
+        if old_file_key not in new_manifest:
+            print(f"[DELETE] Soubor chybí na disku, odstraňuji jeho vektory z databáze Qdrant: {old_file_key}")
+            try:
+                from qdrant_client.models import Filter, FieldCondition, MatchValue
+                qdrant.delete(
+                    collection_name=COLLECTION_NAME,
+                    points_selector=Filter(
+                        must=[FieldCondition(key="source", match=MatchValue(value=old_file_key))]
+                    )
+                )
+            except Exception as e:
+                print(f"[ERROR] Nelze smazat body pro smazaný soubor {old_file_key}: {e}")
                 
-                try:
-                    # Normalizujeme UNC cestu pro získání hostitele a doplnění FQDN
-                    norm_path_for_host = path.replace("\\", "/")
-                    host_netbios_for_walk = norm_path_for_host.lstrip("/").split("/")[0]
-                    host_fqdn_for_walk = _get_fqdn_host(host_netbios_for_walk)
-                    path_fqdn_for_walk = path.replace(host_netbios_for_walk, host_fqdn_for_walk, 1)
+    save_manifest(new_manifest)
+    print("[RECONCILIATION] Skenovací cyklus dokončen.")
 
-                    # Inicializace SMB session pro FQDN hosta
-                    init_smb_session(path_fqdn_for_walk.replace("\\", "/")) # Předáme upravenou cestu s dopřednými lomítky
+def _scan_smb_path(path, collection_name, manifest, new_manifest):
+    if not HAS_SMBCLIENT:
+        print(f"[WARN] Přeskočeno UNC \'{path}\': knihovna smbclient není k dispozici.")
+        return
 
-                    # Procházení SMB složky s FQDN cestou
-                    for dirpath, _, filenames in smbclient.walk(path_fqdn_for_walk.replace("\\", "/")):
-                        for filename in filenames:
-                            if not filename.lower().endswith((".pdf", ".docx", ".xlsx")):
-                                continue
-                            
-                            full_unc = os.path.join(dirpath, filename).replace("\\", "/") # Normalizace cesty
-                            mtime, size = get_smb_file_info(full_unc)
-                            if mtime is None:
-                                print(f"[WARN] Nelze získat informace o souboru {full_unc}. Přeskakuji.")
-                                continue
-                            
-                            file_key = full_unc
-                            new_manifest[file_key] = {"mtime": mtime, "size": size}
-                            
-                            old_info = manifest.get(file_key)
-                            if not old_info or old_info.get("mtime") != mtime or old_info.get("size") != size:
-                                print(f"[INFO] Indexuji nebo aktualizuji: {full_unc}")
-                                success = process_smb_file(full_unc)
-                                if not success:
-                                    if old_info:
-                                        new_manifest[file_key] = old_info
-                                    else:
-                                        new_manifest.pop(file_key, None)
-                except (smbclient.exceptions.SMBException, smbclient.exceptions.SessionError, Exception) as e:
-                    print(f"[ERROR] Selhalo skenování UNC cesty {path}: {e}")
-                    
-            else:
-                if not os.path.exists(path):
-                    print(f"[WARN] Lokální cesta neexistuje: {path}")
+    # 1. Extrakce hostitele
+    parts = [p for p in path.split("/") if p]
+    if not parts:
+        print(f"[WARN] Neplatná UNC cesta: {path}")
+        return
+        
+    host_netbios = parts[0]
+    
+    # 2. Doplnění FQDN (pokud není zadáno)
+    if "." not in host_netbios:
+        host_fqdn = f"{host_netbios}.axinetwork.loc"
+        path_fqdn = path.replace(host_netbios, host_fqdn, 1)
+    else:
+        host_fqdn = host_netbios
+        path_fqdn = path
+        
+    print(f"[SCAN] Skenuji SMB sdílenou složku: {path_fqdn}")
+    
+    try:
+        # 3. Registrace session
+        os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
+        smbclient.register_session(host_fqdn, auth_protocol="negotiate")
+        
+        # 4. Spuštění walk
+        for dirpath, _, filenames in smbclient.walk(path_fqdn):
+            for filename in filenames:
+                if not filename.lower().endswith((".pdf", ".docx", ".xlsx")):
                     continue
                 
-                print(f"[SCAN] Skenuji lokální složku: {path}")
-                for root, _, filenames in os.walk(path):
-                    for filename in filenames:
-                        if not filename.lower().endswith((".pdf", ".docx", ".xlsx")):
-                            continue
-                        
-                        full_local = os.path.join(root, filename).replace("\\", "/") # Normalizace cesty
-                        try:
-                            stat = os.stat(full_local)
-                            mtime, size = stat.st_mtime, stat.st_size
-                        except Exception:
-                            continue
-                        
-                        file_key = full_local
-                        new_manifest[file_key] = {"mtime": mtime, "size": size}
-                        
-                        old_info = manifest.get(file_key)
-                        if not old_info or old_info.get("mtime") != mtime or old_info.get("size") != size:
-                            success = index_file(full_local, full_local)
-                            if not success:
-                                if old_info:
-                                    new_manifest[file_key] = old_info
-                                else:
-                                    new_manifest.pop(file_key, None)
-                                    
-        # Detekce smazaných souborů a pročištění Qdrantu
-        for old_file_key in list(manifest.keys()):
-            if old_file_key not in new_manifest:
-                print(f"[DELETE] Soubor chybí na disku, odstraňuji jeho vektory z databáze Qdrant: {old_file_key}")
-                try:
-                    from qdrant_client.models import Filter, FieldCondition, MatchValue
-                    qdrant.delete(
-                        collection_name=COLLECTION_NAME,
-                        points_selector=Filter(
-                            must=[FieldCondition(key="source", match=MatchValue(value=old_file_key))]
-                        )
-                    )
-                except Exception as e:
-                    print(f"[ERROR] Nelze smazat body pro smazaný soubor {old_file_key}: {e}")
-                    
-        save_manifest(new_manifest)
-        print("[RECONCILIATION] Skenovací cyklus dokončen.")
+                full_unc = os.path.join(dirpath, filename).replace("\\", "/")
+                mtime, size = get_smb_file_info(full_unc)
+                if mtime is None:
+                    print(f"[WARN] Nelze získat informace o souboru {full_unc}. Přeskakuji.")
+                    continue
+                
+                file_key = full_unc
+                new_manifest[file_key] = {"mtime": mtime, "size": size}
+                
+                old_info = manifest.get(file_key)
+                if not old_info or old_info.get("mtime") != mtime or old_info.get("size") != size:
+                    print(f"[INFO] Indexuji nebo aktualizuji: {full_unc}")
+                    success = process_smb_file(full_unc)
+                    if not success:
+                        if old_info:
+                            new_manifest[file_key] = old_info
+                        else:
+                            new_manifest.pop(file_key, None)
+    except (smbclient.exceptions.SMBException, smbclient.exceptions.SessionError, Exception) as e:
+        print(f"[ERROR] Selhalo skenování SMB cesty {path}: {e}")
+
+def _scan_local_path(path, collection_name, manifest, new_manifest):
+    if not os.path.exists(path):
+        print(f"[WARN] Lokální cesta neexistuje: {path}")
+        return
+    
+    print(f"[SCAN] Skenuji lokální složku: {path}")
+    for root, _, filenames in os.walk(path):
+        for filename in filenames:
+            if not filename.lower().endswith((".pdf", ".docx", ".xlsx")):
+                continue
+            
+            full_local = os.path.join(root, filename).replace("\\", "/")
+            try:
+                stat = os.stat(full_local)
+                mtime, size = stat.st_mtime, stat.st_size
+            except Exception:
+                continue
+            
+            file_key = full_local
+            new_manifest[file_key] = {"mtime": mtime, "size": size}
+            
+            old_info = manifest.get(file_key)
+            if not old_info or old_info.get("mtime") != mtime or old_info.get("size") != size:
+                success = index_file(full_local, full_local)
+                if not success:
+                    if old_info:
+                        new_manifest[file_key] = old_info
+                    else:
+                        new_manifest.pop(file_key, None)
 
 if __name__ == "__main__":
     print("Periodický asynchronní Reconciliation Ingest Service spuštěn.")
