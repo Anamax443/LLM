@@ -178,16 +178,16 @@ def verify_paths(req: VerifyRequest):
                     raise ImportError("Knihovna \'smbclient\' není nainstalována na serveru.")
 
                 # Konverze: \\host\share\path -> smb://host/share/path
-                # Ujisti se, že host je FQDN (např. herkules.axinetwork.loc)
-                uri = "smb://" + p.lstrip("\\").replace("\\", "/")
-                
-                # Extrakce hosta pro registraci session
-                host = uri.split("/")[2]
-                os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima" # Změna cesty na sdílenou cestu v domovském adresáři
+                # Extrakce hosta pro registraci session z původní cesty
+                # UNC cesta \\host\share\path. Extrahujeme \\host jako hosta.
+                # smbclient pro register_session očekává jen jméno hosta, ne celou UNC cestu
+                norm_path = p.replace("\\", "/")
+                host = norm_path.lstrip("/").split("/")[0]
+                os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima" # Nastavení ccache přes proměnnou prostředí
                 smbclient.register_session(host, auth_protocol="negotiate")
                 
                 # Validace přes stat
-                stat_res = smbclient.stat(uri)
+                stat_res = smbclient.stat(p)  # Použijeme původní UNC cestu
                 ok = bool(stat_res.file_attributes & 16)
             else:
                 ok = os.path.isdir(p)
