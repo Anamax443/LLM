@@ -120,14 +120,14 @@ def ask_ai_endpoint(req: QueryRequest):
     raw_sources = [hit.payload["source"] for hit in search_result]
     unique_sources = list(set(raw_sources))
     
-    context = "\n\n".join([f"--- Zdroj: {hit.payload["source"]} ---\n{hit.payload["text"]}" for hit in search_result])
+    context = "\n\n".join([f"--- Zdroj: {hit.payload['source']} ---\n{hit.payload['text']}" for hit in search_result])
     
     def event_generator():
         # Poslat nejprve zdroje
-        yield f"data: {json.dumps({"sources": unique_sources}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'sources': unique_sources}, ensure_ascii=False)}\n\n"
         
         if not context.strip():
-            yield f"data: {json.dumps({"error": "Nenašel jsem v databázi relevantní dokumenty."}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'error': 'Nenašel jsem v databázi relevantní dokumenty.'}, ensure_ascii=False)}\n\n"
             return
 
         prompt = f"""KONTEXT:
@@ -151,11 +151,11 @@ OTÁZKA: {req.question}
                     if line:
                         chunk = json.loads(line.decode("utf-8"))
                         token = chunk.get("response", "")
-                        yield f"data: {json.dumps({"token": token}, ensure_ascii=False)}\n\n"
+                        yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
             else:
-                yield f"data: {json.dumps({"error": "Model neodpověděl."}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'error': 'Model neodpověděl.'}, ensure_ascii=False)}\n\n"
         except Exception as e:
-            yield f"data: {json.dumps({"error": f"Chyba spojení s modelem: {str(e)}"}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'error': f'Chyba spojení s modelem: {str(e)}'}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -184,19 +184,21 @@ def verify_paths(req: VerifyRequest):
         try:
             if p.startswith("\\\\") and os.name != "nt":
                 if not HAS_SMBCLIENT:
-                    raise ImportError("Knihovna \'smbclient\' není nainstalována na serveru.")
+                    raise ImportError("Knihovna \"smbclient\" není nainstalována na serveru.")
 
-                # Konverze: \\host\share\path -> smb://host/share/path
                 # Extrakce hosta pro registraci session z původní cesty a doplnění FQDN
                 norm_path = p.replace("\\", "/")
                 host_netbios = norm_path.lstrip("/").split("/")[0]
                 host_fqdn = _get_fqdn_host(host_netbios)
 
+                # Vytvoříme plnou FQDN cestu
+                p_fqdn = p.replace(host_netbios, host_fqdn, 1)
+
                 os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima" # Nastavení ccache přes proměnnou prostředí
                 smbclient.register_session(host_fqdn, auth_protocol="negotiate")
                 
-                # Validace přes stat s původní cestou (smbclient umí zpracovat UNC cestu i s FQDN hostem)
-                stat_res = smbclient.stat(p)  
+                # Musíš použít novou cestu p_fqdn!
+                stat_res = smbclient.stat(p_fqdn)  
                 ok = bool(stat_res.st_file_attributes & 16) # Použijeme st_file_attributes
             else:
                 ok = os.path.isdir(p)
