@@ -15,9 +15,32 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import requests
+import traceback
 from qdrant_client import QdrantClient
 
 app = FastAPI(title="AXIMA RAG API", version="1.1")
+
+
+def _check_service_health(url, service_name):
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        print(f"[INFO] Služba {service_name} je dostupná na {url}")
+    except requests.exceptions.ConnectionError:
+        raise RuntimeError(f"Služba {service_name} není dostupná na {url}. Ujistěte se, že běží.")
+    except requests.exceptions.Timeout:
+        raise RuntimeError(f"Vypršel časový limit při připojování k {service_name} na {url}.")
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"Chyba při kontrole {service_name} na {url}: {e}")
+
+
+@app.on_event("startup")
+async def startup_event():
+    print("[INFO] Provádím kontroly zdraví Qdrant a Ollama...")
+    _check_service_health(QDRANT_URL, "Qdrant")
+    _check_service_health(f"{OLLAMA_URL}/tags", "Ollama") # Endpoint pro kontrolu dostupnosti Ollamy
+    print("[INFO] Qdrant a Ollama jsou dostupné.")
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(BASE_DIR, "web")
@@ -103,62 +126,72 @@ def get_embedding(text):
 
 @app.post("/ask")
 def ask_ai_endpoint(req: QueryRequest):
-    vector = get_embedding(req.question)
-    if not vector:
-        raise HTTPException(status_code=500, detail="Nelze komunikovat s modelem.")
-
-    client = QdrantClient(QDRANT_URL)
     try:
-        search_result = client.query_points(
-            collection_name=COLLECTION_NAME,
-            query=vector,
-            limit=6,
-            score_threshold=0.5
-        ).points
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chyba databáze: {str(e)}")
+        vector = get_embedding(req.question)
+        if not vector:
+            raise HTTPException(status_code=500, detail="Nelze komunikovat s modelem pro embedding.")
 
-    raw_sources = [hit.payload["source"] for hit in search_result]
-    unique_sources = list(set(raw_sources))
-    
-    context = "\n\n".join([f"--- Zdroj: {hit.payload['source']} ---\n{hit.payload['text']}" for hit in search_result])
-    
-    def event_generator():
-        # Poslat nejprve zdroje
-        yield f"data: {json.dumps({'sources': unique_sources}, ensure_ascii=False)}\n\n"
+        client = QdrantClient(QDRANT_URL)
+        try:
+            search_result = client.query_points(
+                collection_name=COLLECTION_NAME,
+                query=vector,
+                limit=6,
+                score_threshold=0.5
+            ).points
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Chyba databáze Qdrant: {str(e)}")
+
+        raw_sources = [hit.payload["source"] for hit in search_result]
+        unique_sources = list(set(raw_sources))
         
-        if not context.strip():
-            yield f"data: {json.dumps({'error': 'Nenašel jsem v databázi relevantní dokumenty.'}, ensure_ascii=False)}\n\n"
-            return
+        context = "\n\n".join([f"--- Zdroj: {hit.payload["source"]} ---\n{hit.payload["text"]}" for hit in search_result])
+        
+        def event_generator():
+            # Poslat nejprve zdroje
+            yield f"data: {json.dumps({"sources": unique_sources}, ensure_ascii=False)}\n\n"
+            
+            if not context.strip():
+                yield f"data: {json.dumps({"error": "Nenašel jsem v databázi relevantní dokumenty."}, ensure_ascii=False)}\n\n"
+                return
 
-        prompt = f"""KONTEXT:
+            prompt = f"""KONTEXT:
 {context}
 
 OTÁZKA: {req.question}
 """
-        try:
-            resp = requests.post(
-                f"{OLLAMA_URL}/generate",
-                json={
-                    "model": CHAT_MODEL,
-                    "system": SYSTEM_PROMPT,
-                    "prompt": prompt,
-                    "stream": True
-                },
-                stream=True
-            )
-            if resp.status_code == 200:
-                for line in resp.iter_lines():
-                    if line:
-                        chunk = json.loads(line.decode("utf-8"))
-                        token = chunk.get("response", "")
-                        yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
-            else:
-                yield f"data: {json.dumps({'error': 'Model neodpověděl.'}, ensure_ascii=False)}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'error': f'Chyba spojení s modelem: {str(e)}'}, ensure_ascii=False)}\n\n"
+            try:
+                resp = requests.post(
+                    f"{OLLAMA_URL}/generate",
+                    json={
+                        "model": CHAT_MODEL,
+                        "system": SYSTEM_PROMPT,
+                        "prompt": prompt,
+                        "stream": True
+                    },
+                    stream=True
+                )
+                if resp.status_code == 200:
+                    for line in resp.iter_lines():
+                        if line:
+                            chunk = json.loads(line.decode("utf-8"))
+                            token = chunk.get("response", "")
+                            yield f"data: {json.dumps({"token": token}, ensure_ascii=False)}\n\n"
+                else:
+                    yield f"data: {json.dumps({"error": f"Model neodpověděl (HTTP {resp.status_code})."}, ensure_ascii=False)}\n\n"
+            except requests.exceptions.ConnectionError:
+                yield f"data: {json.dumps({"error": "Chyba spojení s modelem Ollama. Ujistěte se, že běží."}, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                traceback.print_exc()
+                yield f"data: {json.dumps({"error": f"Neočekávaná chyba při generování odpovědi: {str(e)}"}, ensure_ascii=False)}\n\n"
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+    except HTTPException:
+        raise # Znovu vyhodit, aby FastAPI zpracovalo
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Interní chyba serveru: {str(e)}")
+
 
 
 @app.get("/api/version")
