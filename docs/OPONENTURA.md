@@ -2,7 +2,7 @@
 
 **Projekt:** Lokální AI asistent (RAG) nad interní firemní dokumentací
 **Repozitář:** Axima-Git/LLM · **Stav:** funkční prototyp + UI, roadmapa do produkce
-**Verze podkladu:** 3.1 (2026-07-02) — po implementaci Dynamic File Server Mount řešení
+**Verze podkladu:** 3.2 (2026-07-03) — po opravách Kerberos autentizace, FQDN doplňování a f-string syntaxe
 
 > Účel: poskytnout hodnoticí komisi úplný technický i manažerský obraz projektu, obhájit rozhodnutí, otevřeně pojmenovat rizika a omezení a předjímat kritické otázky. Verze 2.0 reaguje na nezávislé posudky — opravuje přehnaná tvrzení, přeřazuje priority a doplňuje dosud chybějící kapitoly. Sekce, u kterých s posudky nesouhlasím, jsou uvedeny v kap. 14.
 

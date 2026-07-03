@@ -2,7 +2,7 @@
 
 Živý pracovní dokument. **Aktualizuje se po každé změně + commit** (aby se dalo navázat z jiného stroje / mezi lidmi — na projektu se pracuje společně, commituje i kolega `stepancerny1-cyber`).
 
-**Poslední aktualizace:** 2026-07-02 (UI: streaming odpovědí, chat historie, Markdown, Stop tlačítko; Dynamic File Server Mount implementace)
+**Poslední aktualizace:** 2026-07-03 (Oprava Kerberos autentizace, FQDN doplňování, f-string syntaxe)
 
 ---
 
@@ -11,7 +11,7 @@
 - **Backend (POC, funkční):** `watchdog_service.py` (ingest), `api.py` (`POST /ask`), `ask_ai.py` (CLI). Stack Ollama (`nomic-embed-text` + `llama3.1`) + Qdrant (`axima_docs`, 768D).
 - **Web UI (nové):** `web/index.html` — homepage dle AXIMA UI standardu, **AXIMA logo v hlavičce**, 4 záložky, dark+light, tisk light (**logo v hlavičce tisku**), CS+EN, servisní řádek **v hlavičce** (health + model + commit + hodiny + GitHub). **Nově:** **streamovaný chat** s historií konverzace a podporou Markdownu, tlačítko "Zastavit" generování. Nastavení má **Stav skenování** (poslední/příští sken, „Skenovat teď", per-cesta dokumenty/bloky/čerstvost). Dokumentace = **plnohodnotné firemní články uvnitř aplikace** (boční menu, CS+EN, bez odkazů na git/soubory). Vše na vzorových datech, připraveno na `/api/settings`, `/api/scope`, `/api/scan`.
 - **Přílohy k dotazu (nové):** v Asistentu tlačítko 📎 + **vkládání ze schránky (Ctrl+V screenshot)** + náhled příloh; obsah se přes `POST /api/extract` převede na text (docx/xlsx/pdf/txt parsery + **OCR** obrázků přes pytesseract, graceful fallback) a přidá ke kontextu. Deploy: `pip` (python-multipart, pytesseract, Pillow) + systémový `tesseract-ocr` + `tesseract-ocr-ces`.
-- **Ověření cest (nové):** tlačítko „Ověřit dostupnost cest" + **terminál**; `POST /api/verify` na serveru provádí ověření UNC cest přímo v uživatelském prostoru (User Space) přes knihovnu `smbclient` bez nutnosti montování na úrovni OS a bez práv root. **STAV je do ověření „neověřeno"** — nefabrikuje se. Manuální kroky pro nastavení Linuxu jsou v **[docs/LINUX_SETUP_GUIDE.md](LINUX_SETUP_GUIDE.md)**.
+- **Ověření cest (nové):** tlačítko „Ověřit dostupnost cest" + **terminál**; `POST /api/verify` na serveru provádí ověření UNC cest přímo v uživatelském prostoru (User Space) přes knihovnu `smbclient` s Kerberos autentizací (automatické doplňování FQDN, explicitní ccache `FILE:/home/aixima/krb5cc_axima`). Bez nutnosti montování na úrovni OS a bez práv root. **STAV je do ověření „neověřeno"** — nefabrikuje se. Manuální kroky pro nastavení Linuxu (Kerberos keytab gMSA s právy `400`) jsou v **[docs/LINUX_SETUP_GUIDE.md](LINUX_SETUP_GUIDE.md)**.
 - **Hlavička (nové):** servisní řádek přesunut z patičky **do hlavičky** (health + model 🧠 + commit + hodiny + **GitHub ikona**); model/GitHub volitelně skryjete v Nastavení (localStorage). Změněn i AXIMA UI standard (repo Anamax443/axima-ui-standard).
 - **`api.py` doplněno:** `GET /api/version` (kontrakt `{commit,branch,builtAt,startedAt}`), `POST /api/verify`, `POST /api/extract` + servírování `web/`. `/ask` streamuje (SSE).
 - **Guardrails (nové):** systémová pravidla přesunuta z promptu do pole **`system`** Ollamy (odděleně od uživatelského vstupu) — bez persony, **odolné vůči prompt injection** (ignoruje pokusy „změň roli/pravidla"), odpovídá jen z KONTEXTU, jinak „V dostupné dokumentaci jsem odpověď nenašel." Opravuje chování, kdy se model představoval jako „senior administrátor" a nechal si měnit roli.

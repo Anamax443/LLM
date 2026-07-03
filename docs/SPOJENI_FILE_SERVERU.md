@@ -92,7 +92,7 @@ Systém plně podporuje integraci do podnikového prostředí Active Directory.
 1. Pro RAG asistenta je vytvořen **Group Managed Service Account** (např. `svc-rag-reader$`), který nemá statické heslo.
 2. Na Linux serveru se zprovozní Kerberos klient (`krb5-user`, `libkrb5-dev`).
 3. Vygeneruje se `.keytab` soubor pro tento gMSA účet s přísným oprávněním (viz [LINUX_SETUP_GUIDE.md](LINUX_SETUP_GUIDE.md)).
-4. Python knihovna `smbprotocol` využije Kerberos lístek pro automatické bezpečné ověření bez nutnosti ukládání jakéhokoliv hesla.
+4. Python knihovna `smbprotocol` využije Kerberos lístek pro automatické bezpečné ověření (s explicitním `KRB5CCNAME="FILE:/home/aixima/krb5cc_axima"`) bez nutnosti ukládání jakéhokoliv hesla. Automatické doplňování FQDN k NetBIOS jménům hostitelů.
 
 ### Možnost B: Standardní servisní účet (Dev / Staging)
 1. Přihlašovací údaje (uživatelské jméno a heslo) jsou předány FastAPI aplikaci bezpečně pomocí **proměnných prostředí** v konfiguraci Systemd služby (nikdy v textovém souboru nebo DB).

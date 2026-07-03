@@ -1004,33 +1004,54 @@ document.getElementById("setModel").addEventListener("input", applyHeaderExtras)
 applyHeaderExtras();
 
 /* ================= Footer: /api/version + health + hodiny ================= */
-function refreshHealthText(){
-  const el = document.getElementById("healthText");
-  if (el.dataset.state === "ok") el.textContent = t("footer.ok");
-  else if (el.dataset.state === "err") el.textContent = t("footer.err");
-  else el.textContent = t("footer.checking");
-}
-async function loadVersion(){
-  const dot = document.getElementById("healthDot"), txt = document.getElementById("healthText");
-  try {
-    const r = await fetch("/api/version"); if (!r.ok) throw new Error();
-    const d = await r.json();
-    document.getElementById("commit").textContent = (d.commit || "?").slice(0,7) + (d.branch ? " ("+d.branch+")" : "");
-    dot.className = "dot ok"; txt.dataset.state = "ok";
-  } catch (e) {
-    document.getElementById("commit").textContent = "dev";
-    dot.className = "dot err"; txt.dataset.state = "err";
-  }
-  refreshHealthText();
-}
-function tick(){
-  const d = new Date();
-  const p = n => String(n).padStart(2,"0");
-  document.getElementById("clock").textContent = `${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
+   function refreshHealthText(){
+     const el = document.getElementById("healthText");
+     if (el.dataset.state === "ok") el.textContent = t("footer.ok");
+     else if (el.dataset.state === "err") el.textContent = t("footer.err");
+     else el.textContent = t("footer.checking");
+   }
 
-/* ================= Init ================= */
-applyTheme(); applyLang(); loadVersion(); tick(); setInterval(tick, 1000);
+   function updateStatusText(status = "checking") {
+     const el = document.getElementById("hdrStatusText");
+     if (!el) return;
+     if (status === "ok") el.textContent = t("footer.ok");
+     else if (status === "err") el.textContent = t("footer.err");
+     else el.textContent = t("footer.checking");
+   }
+
+   async function loadVersion(){
+     const dot = document.getElementById("healthDot"), txt = document.getElementById("healthText");
+     const hdrStatus = document.getElementById("hdrStatus"); // Element pro nový status v hlavičce
+
+     try {
+       const r = await fetch("/api/version"); 
+       if (!r.ok) throw new Error("Backend offline");
+       
+       const d = await r.json();
+       document.getElementById("commit").textContent = (d.commit || "?").slice(0,7) + (d.branch ? " ("+d.branch+")" : "");
+       dot.className = "dot ok"; 
+       txt.dataset.state = "ok";
+       if (hdrStatus) hdrStatus.className = "model"; // Reset třídy
+       updateStatusText(d.status || "ok"); // Aktualizace nového status elementu
+
+     } catch (e) {
+       document.getElementById("commit").textContent = "dev";
+       dot.className = "dot err"; 
+       txt.dataset.state = "err";
+       if (hdrStatus) hdrStatus.className = "model err"; // Nastavení chybové třídy pro status v hlavičce
+       updateStatusText("err");
+     }
+     refreshHealthText();
+   }
+
+   function tick(){
+     const d = new Date();
+     const p = n => String(n).padStart(2,"0");
+     document.getElementById("clock").textContent = `${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+   }
+
+   /* ================= Init ================= */
+   applyTheme(); applyLang(); loadVersion(); tick(); setInterval(tick, 1000);
 </script>
 </body>
 </html>
