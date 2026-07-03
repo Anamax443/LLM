@@ -13,12 +13,23 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware # Import CORSMiddleware
 from pydantic import BaseModel
 import requests
 import traceback
 from qdrant_client import QdrantClient
 
 app = FastAPI(title="AXIMA RAG API", version="1.1")
+
+# Nastavení CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Povolit všechny domény
+    allow_credentials=True,
+    allow_methods=["*"],  # Povolit všechny HTTP metody
+    allow_headers=["*"],  # Povolit všechny hlavičky
+)
+
 
 
 def _check_service_health(url, service_name):
