@@ -253,59 +253,71 @@ def reconciliation_scan():
     print("[RECONCILIATION] Skenovací cyklus dokončen.")
 
 def _scan_smb_path(path, collection_name, manifest, new_manifest):
+    print(f"[DEBUG] _scan_smb_path zahájeno pro: {path}")
+
     if not HAS_SMBCLIENT:
-        print(f"[WARN] Přeskočeno UNC \'{path}\': knihovna smbclient není k dispozici.")
+        print(f"[WARN] Přeskočeno UNC \'{path}\": knihovna smbclient není k dispozici.")
         return
 
-    # 1. Extrakce hostitele
-    parts = [p for p in path.split("/") if p]
-    if not parts:
-        print(f"[WARN] Neplatná UNC cesta: {path}")
-        return
-        
-    host_netbios = parts[0]
-    
-    # 2. Doplnění FQDN (pokud není zadáno)
-    if "." not in host_netbios:
-        host_fqdn = f"{host_netbios}.axinetwork.loc"
-        path_fqdn = path.replace(host_netbios, host_fqdn, 1)
-    else:
-        host_fqdn = host_netbios
-        path_fqdn = path
-        
-    print(f"[SCAN] Skenuji SMB sdílenou složku: {path_fqdn}")
-    
     try:
+        win_path = path.replace("//", "\\\\").replace("/", "\\") # Konverze na zpětná lomítka pro smbclient
+        print(f"[DEBUG] Konvertovaná Windows cesta pro smbclient: {win_path}")
+
+        # 1. Extrakce hostitele
+        parts = [p for p in path.split("/") if p]
+        if not parts:
+            print(f"[WARN] Neplatná UNC cesta: {path}")
+            return
+            
+        host_netbios = parts[0]
+        
+        # 2. Doplnění FQDN (pokud není zadáno)
+        if "." not in host_netbios:
+            host_fqdn = f"{host_netbios}.axinetwork.loc"
+        else:
+            host_fqdn = host_netbios
+        print(f"[DEBUG] Hostitel FQDN: {host_fqdn}")
+        
+        # Aktualizujeme win_path s FQDN hostem pro smbclient.walk a další operace
+        win_path_fqdn = win_path.replace(host_netbios, host_fqdn, 1)
+        print(f"[DEBUG] Konvertovaná FQDN Windows cesta pro smbclient: {win_path_fqdn}")
+
         # 3. Registrace session
         os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
         smbclient.register_session(host_fqdn, auth_protocol="negotiate")
+        print(f"[DEBUG] SMB session registrována pro {host_fqdn}")
         
         # 4. Spuštění walk
-        for dirpath, _, filenames in smbclient.walk(path_fqdn):
+        for dirpath, _, filenames in smbclient.walk(win_path_fqdn):
             for filename in filenames:
+                print(f"[DEBUG] Nalezen soubor: {filename} v {dirpath}")
                 if not filename.lower().endswith((".pdf", ".docx", ".xlsx")):
+                    print(f"[DEBUG] Soubor {filename} ignorován (nepodporovaná přípona).")
                     continue
                 
-                full_unc = os.path.join(dirpath, filename).replace("\\", "/")
-                mtime, size = get_smb_file_info(full_unc)
+                full_unc_win = os.path.join(dirpath, filename) # Původní UNC cesta se zpětnými lomítky
+                full_unc_norm = full_unc_win.replace("\\", "/") # Normalizovaná cesta pro Qdrant
+
+                mtime, size = get_smb_file_info(full_unc_norm)
                 if mtime is None:
-                    print(f"[WARN] Nelze získat informace o souboru {full_unc}. Přeskakuji.")
+                    print(f"[WARN] Nelze získat informace o souboru {full_unc_norm}. Přeskakuji.")
                     continue
                 
-                file_key = full_unc
+                file_key = full_unc_norm
                 new_manifest[file_key] = {"mtime": mtime, "size": size}
                 
                 old_info = manifest.get(file_key)
                 if not old_info or old_info.get("mtime") != mtime or old_info.get("size") != size:
-                    print(f"[INFO] Indexuji nebo aktualizuji: {full_unc}")
-                    success = process_smb_file(full_unc)
+                    print(f"[INFO] Indexuji nebo aktualizuji: {full_unc_norm}")
+                    success = process_smb_file(full_unc_norm)
                     if not success:
                         if old_info:
                             new_manifest[file_key] = old_info
                         else:
                             new_manifest.pop(file_key, None)
     except (smbclient.exceptions.SMBException, smbclient.exceptions.SessionError, Exception) as e:
-        print(f"[ERROR] Selhalo skenování SMB cesty {path}: {e}")
+        print(f"[ERROR] Selhání uvnitř _scan_smb_path pro cestu {path}: {e}")
+
 
 def _scan_local_path(path, collection_name, manifest, new_manifest):
     if not os.path.exists(path):
