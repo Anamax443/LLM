@@ -221,8 +221,10 @@ def reconciliation_scan():
         monitored_paths_raw = os.getenv("MONITORED_PATHS", "/data/llm-demo/watchdog/incoming")
         monitored_paths = [p.strip() for p in monitored_paths_raw.split(",") if p.strip()]
 
-    for path in monitored_paths:
-        if path.startswith("\\\\"):
+    for path_raw in monitored_paths:
+        path = path_raw.replace("\\", "/") # Normalizujeme cestu na dopředná lomítka hned na začátku
+
+        if path.startswith("//"):
             # UNC síťová cesta přes user-space SMB
             if not HAS_SMBCLIENT:
                 print(f"[WARN] Přeskočeno UNC '{path}': knihovna smbclient není k dispozici.")
