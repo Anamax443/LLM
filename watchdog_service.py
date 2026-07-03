@@ -143,23 +143,20 @@ def index_file(local_path, display_name):
     
     # Smazání starých vektorů pro tento konkrétní zdroj před novým vložením (prevence duplicit)
     try:
+        from qdrant_client.http import models
         qdrant.delete(
             collection_name=COLLECTION_NAME,
-            points_selector=PointStruct(
-                id=str(uuid.uuid4()), # dummy
-                # V reálné produkci filtrujeme podle payload "source"
-            )
-        )
-        # Pro jistotu promažeme staré body s tímto zdrojem v produkčním filtru:
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
-        qdrant.delete(
-            collection_name=COLLECTION_NAME,
-            points_selector=Filter(
-                must=[FieldCondition(key="source", match=MatchValue(value=display_name))]
+            points_selector=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="source",
+                        match=models.MatchValue(value=display_name)
+                    )
+                ]
             )
         )
     except Exception as e:
-        print(f"[DEBUG] Nepodařilo se promazat staré body (možná neexistují): {e}")
+        print(f"[DEBUG] Nepodařilo se promazat staré body: {e}")
 
     # Vektorizace a uložení
     points = []
