@@ -256,7 +256,7 @@ def verify_paths(req: VerifyRequest):
 
 
 # Ukládání a načítání monitorovaných cest (pro ingestor)
-MONITORED_PATHS_FILE = "monitored_paths.json"
+MONITORED_PATHS_FILE = os.path.join(BASE_DIR, "monitored_paths.json")
 
 def load_monitored_paths():
     if os.path.exists(MONITORED_PATHS_FILE):
