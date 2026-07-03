@@ -88,28 +88,39 @@ def get_embedding(text):
         print(f"[ERROR] Chyba získání embeddingu: {e}")
     return None
 
+def _get_fqdn_host(hostname):
+    """Doplní FQDN k NetBIOS jménu hostitele, pokud chybí."""
+    if "." not in hostname:  # Pokud hostname neobsahuje tečku, předpokládáme NetBIOS jméno
+        return f"{hostname}.axinetwork.loc"
+    return hostname
+
 def init_smb_session(unc_path):
-    """Zajistí registraci SMB relace pro daný server, pokud jsou v env credentials."""
+    """Zajistí registraci SMB relace pro daný server s Kerberos autentizací."""
     if not HAS_SMBCLIENT:
         return False
-    username = os.getenv("SMB_USERNAME")
-    password = os.getenv("SMB_PASSWORD")
-    if username:
-        norm = unc_path.replace("\\", "/")
-        parts = [p for p in norm.split("/") if p]
-        if parts:
-            host = parts[0]
-            try:
-                smbclient.register_session(host, username=username, password=password, auth_protocol="negotiate")
-                return True
-            except Exception:
-                pass
-    return False
 
+    norm = unc_path.replace("\\", "/")
+    parts = [p for p in norm.split("/") if p]
+    if parts:
+        host_netbios = parts[0]
+        host_fqdn = _get_fqdn_host(host_netbios)
+        try:
+            os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
+            smbclient.register_session(host_fqdn, auth_protocol="negotiate")
+            return True
+        except Exception as e:
+            print(f"[ERROR] Chyba při registraci SMB session pro {host_fqdn}: {e}")
+    return False
 def get_smb_file_info(unc_path):
     """Vrací mtime a size pro soubor na SMB."""
     try:
-        stat = smbclient.stat(unc_path)
+        # Normalizujeme UNC cestu pro získání hostitele a doplnění FQDN
+        norm_path = unc_path.replace("\\", "/")
+        host_netbios = norm_path.lstrip("/").split("/")[0]
+        host_fqdn = _get_fqdn_host(host_netbios)
+        unc_path_fqdn = unc_path.replace(host_netbios, host_fqdn, 1)
+
+        stat = smbclient.stat(unc_path_fqdn)
         return stat.st_mtime, stat.st_size
     except Exception:
         return None, None
@@ -169,17 +180,23 @@ def process_smb_file(unc_path):
     print(f"[DOWNLOAD] Stahuji ze SMB: {unc_path}")
     # TemporaryDirectory se postará o automatický a bezpečný úklid i při pádu
     with tempfile.TemporaryDirectory(prefix="rag_ingest_") as temp_dir:
-        local_filename = os.path.basename(unc_path.replace('\\', '/'))
+        # Normalizujeme UNC cestu pro získání hostitele a doplnění FQDN
+        norm_path = unc_path.replace("\\", "/")
+        host_netbios = norm_path.lstrip("/").split("/")[0]
+        host_fqdn = _get_fqdn_host(host_netbios)
+        unc_path_fqdn = unc_path.replace(host_netbios, host_fqdn, 1)
+
+        local_filename = os.path.basename(unc_path_fqdn.replace('\\', '/'))
         tmp_path = os.path.join(temp_dir, local_filename)
         
         try:
-            with smbclient.open_file(unc_path, "rb") as remote_f, open(tmp_path, "wb") as local_f:
+            with smbclient.open_file(unc_path_fqdn, "rb") as remote_f, open(tmp_path, "wb") as local_f:
                 local_f.write(remote_f.read())
             
             # Indexace staženého lokálního souboru
-            return index_file(tmp_path, unc_path)
+            return index_file(tmp_path, unc_path_fqdn)
         except Exception as e:
-            print(f"[ERROR] Selhalo stažení nebo zpracování souboru {unc_path}: {e}")
+            print(f"[ERROR] Selhalo stažení nebo zpracování souboru {unc_path_fqdn}: {e}")
             return False
 
 def reconciliation_scan():
@@ -205,8 +222,15 @@ def reconciliation_scan():
             
             try:
                 # Procházení SMB složky
+                # Normalizujeme UNC cestu pro získání hostitele a doplnění FQDN
+                norm_path_for_host = path.replace("\\", "/")
+                host_netbios_for_walk = norm_path_for_host.lstrip("/").split("/")[0]
+                host_fqdn_for_walk = _get_fqdn_host(host_netbios_for_walk)
+                path_fqdn_for_walk = path.replace(host_netbios_for_walk, host_fqdn_for_walk, 1)
+
+                # Procházení SMB složky s FQDN cestou
                 # smbclient.walk vrací (dirpath, dirnames, filenames)
-                for dirpath, _, filenames in smbclient.walk(path):
+                for dirpath, _, filenames in smbclient.walk(path_fqdn_for_walk):
                     for filename in filenames:
                         # Filtrujeme pouze dokumenty
                         if not filename.lower().endswith(('.pdf', '.docx', '.xlsx')):

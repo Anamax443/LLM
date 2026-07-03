@@ -112,7 +112,8 @@ def ask_ai_endpoint(req: QueryRequest):
         search_result = client.query_points(
             collection_name=COLLECTION_NAME,
             query=vector,
-            limit=6
+            limit=6,
+            score_threshold=0.5
         ).points
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Chyba databáze: {str(e)}")
