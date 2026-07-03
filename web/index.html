@@ -612,16 +612,26 @@ document.querySelectorAll(".docs-navitem").forEach(btn => btn.onclick = () => {
 });
 
 /* ================= Settings: paths (sample data) ================= */
-// Stav dostupnosti a čerstvost smí být "ověřený" JEN když ho dodá reálný backend
-// (endpoint /api/scan zatím neexistuje) — jinak zásadně "neověřeno", ne fake "dostupná".
+const API_BASE = "http://localhost:8000/api"; // Místo pro URL backendu
+
+let paths = []; // Inicializace prázdného pole, cesty se budou načítat z backendu
 let dataVerified = false;
-let paths = [
-  { path: "\\\\fileserver\\Smernice", sub: true,  ext: "docx,pdf", ok: true,  on: true },
-  { path: "\\\\fileserver\\IT\\Postupy", sub: true, ext: "docx,md", ok: true, on: true },
-  { path: "\\\\fileserver\\Infrastruktura", sub: true, ext: "xlsx,pdf", ok: false, on: true },
-  { path: "\\\\nas02\\Provoz\\Zalohy", sub: false, ext: "pdf", ok: true, on: false },
-  { path: "\\\\herkules\\public\\LumirLiduMil", sub: true, ext: "docx,pdf,xlsx", ok: false, on: true }
-];
+
+async function loadPaths() {
+  try {
+    const response = await fetch(`${API_BASE}/monitored_paths`);
+    if (!response.ok) throw new Error("Backend error");
+    const data = await response.json();
+    paths = data.map(path => ({ path: path, sub: true, ext: "docx,pdf,xlsx", ok: true, on: true })); // Předpokládáme, že backend vrací jen stringy cest
+    dataVerified = true;
+    renderPaths();
+  } catch (e) {
+    console.error("Nepodařilo se načíst cesty z backendu:", e);
+    dataVerified = false;
+    paths = []; // Fallback na prázdné pole, pokud backend není dostupný
+    renderPaths();
+  }
+}
 function renderPaths(){
   const _off = document.getElementById("offlineNote"); if (_off) _off.style.display = dataVerified ? "none" : "block";
   const b = document.getElementById("pathsBody"); b.innerHTML = "";
@@ -636,20 +646,36 @@ function renderPaths(){
       <td><button class="btn secondary" data-rm="${i}" style="padding:4px 10px;">✕</button></td>`;
     b.appendChild(tr);
   });
-  b.querySelectorAll("[data-i]").forEach(el => el.onclick = () => { paths[el.dataset.i].on = !paths[el.dataset.i].on; renderPaths(); });
-  b.querySelectorAll("[data-rm]").forEach(el => el.onclick = () => {
-    const msg = lang==="cs" ? "Odebrat cestu? Její dokumenty se smažou i ze znalostní báze." : "Remove path? Its documents will also be deleted from the knowledge base.";
-    if (confirm(msg)) { paths.splice(el.dataset.rm,1); renderPaths(); }
-  });
-  if (typeof renderScan === "function") renderScan();
-}
-document.getElementById("addPathBtn").onclick = () => {
-  const p = prompt(lang==="cs" ? "Zadejte cestu (UNC nebo mount):" : "Enter path (UNC or mount):", "\\\\fileserver\\");
-  if (p) { paths.push({ path:p, sub:true, ext:"docx,pdf,xlsx", ok:true, on:true }); renderPaths(); }
-};
-document.getElementById("saveSettings").onclick = () => {
-  alert(lang==="cs" ? "Uloženo (ukázka). Po napojení na backend se pošle na POST /api/settings." : "Saved (sample). Once wired, this POSTs to /api/settings.");
-};
+    b.querySelectorAll("[data-i]").forEach(el => el.onclick = () => { paths[el.dataset.i].on = !paths[el.dataset.i].on; savePaths(); });
+    b.querySelectorAll("[data-rm]").forEach(el => el.onclick = () => {
+      const msg = lang==="cs" ? "Odebrat cestu? Její dokumenty se smažou i ze znalostní báze." : "Remove path? Its documents will also be deleted from the knowledge base.";
+      if (confirm(msg)) { paths.splice(el.dataset.rm,1); savePaths(); }
+    });
+    if (typeof renderScan === "function") renderScan();
+  }
+
+  async function savePaths() {
+    try {
+      const response = await fetch(`${API_BASE}/set_monitored_paths`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(paths.map(p => p.path))
+      });
+      if (!response.ok) throw new Error("Backend error");
+      console.log("Cesty uloženy na backendu.");
+    } catch (e) {
+      console.error("Nepodařilo se uložit cesty na backend:", e);
+      alert(lang === "cs" ? "Chyba při ukládání cest na backend." : "Error saving paths to backend.");
+    }
+  }
+
+  document.getElementById("addPathBtn").onclick = () => {
+    const p = prompt(lang==="cs" ? "Zadejte cestu (UNC nebo mount):" : "Enter path (UNC or mount):", "\\\\fileserver\\");
+    if (p) { paths.push({ path:p, sub:true, ext:"docx,pdf,xlsx", ok:true, on:true }); savePaths(); }
+  };
+  document.getElementById("saveSettings").onclick = () => {
+    alert(lang==="cs" ? "Uloženo (ukázka). Po napojení na backend se pošle na POST /api/settings." : "Saved (sample). Once wired, this POSTs to /api/settings.");
+  };
 
 /* ================= Ověření platnosti/dostupnosti cest + terminál ================= */
 function _ts(){ const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
@@ -922,22 +948,12 @@ async function ask(){
       if (sourcesDiv) aiDiv.appendChild(sourcesDiv);
     } else {
       aiDiv.innerHTML = "";
-      const errSpan = document.createElement("span");
-      errSpan.style.color = "var(--err)";
-      errSpan.textContent = lang === "cs"
-        ? "[Ukázkový režim] Backend zatím neběží. Po spuštění FastAPI (POST /ask) se sem vypíše reálná odpověď s citovanými zdroji.\n\nPříklad: „Postup obnovy serveru — 1) najděte server v Veeam a klikněte pravým… 2) zvolte zálohu a potvrďte OK…“"
-        : "[Sample mode] Backend not running yet. Once FastAPI is up (POST /ask), the real answer with cited sources appears here.";
-      aiDiv.appendChild(errSpan);
-      
-      sourcesDiv = document.createElement("div");
-      sourcesDiv.className = "sources";
-      ["Obnovení serveru ze zálohy.docx", "Nastavení authenticatoru.docx"].forEach(s => {
-        const c = document.createElement("span");
-        c.className = "source-chip";
-        c.textContent = "📄 " + s;
-        sourcesDiv.appendChild(c);
-      });
-      aiDiv.appendChild(sourcesDiv);
+        const errSpan = document.createElement("span");
+        errSpan.style.color = "var(--err)";
+        errSpan.textContent = lang === "cs"
+          ? "Chyba: Nepodařilo se spojit s backendem."
+          : "Error: Could not connect to backend.";
+        aiDiv.appendChild(errSpan);
     }
     chatHistory.scrollTop = chatHistory.scrollHeight;
   } finally {
@@ -1050,8 +1066,8 @@ applyHeaderExtras();
      document.getElementById("clock").textContent = `${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
    }
 
-   /* ================= Init ================= */
-   applyTheme(); applyLang(); loadVersion(); tick(); setInterval(tick, 1000);
+    /* ================= Init ================= */
+    applyTheme(); applyLang(); loadVersion(); loadPaths(); tick(); setInterval(tick, 1000);
 </script>
 </body>
 </html>
