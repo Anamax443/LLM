@@ -188,7 +188,7 @@ def verify_paths(req: VerifyRequest):
                 
                 # Validace přes stat
                 stat_res = smbclient.stat(p)  # Použijeme původní UNC cestu
-                ok = bool(stat_res.file_attributes & 16)
+                ok = bool(stat_res.st_file_attributes & 16) # Použijeme st_file_attributes
             else:
                 ok = os.path.isdir(p)
         except Exception as e:
