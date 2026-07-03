@@ -141,6 +141,9 @@ def index_file(local_path, display_name):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = splitter.split_text(content)
     
+    # Obohacení chunků o informaci o zdrojovém souboru
+    enriched_chunks = [f"Zdrojový dokument: {display_name}\nObsah:\n{chunk}" for chunk in chunks]
+
     # Smazání starých vektorů pro tento konkrétní zdroj před novým vložením (prevence duplicit)
     try:
         from qdrant_client.http import models
@@ -160,7 +163,7 @@ def index_file(local_path, display_name):
 
     # Vektorizace a uložení
     points = []
-    for i, chunk in enumerate(chunks):
+    for i, chunk in enumerate(enriched_chunks): # Používáme obohacené chunky
         vector = get_embedding(chunk)
         if vector:
             points.append(PointStruct(
