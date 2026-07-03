@@ -24,10 +24,10 @@ app = FastAPI(title="AXIMA RAG API", version="1.1")
 # Nastavení CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Povolit všechny domény
-    allow_credentials=True,
-    allow_methods=["*"],  # Povolit všechny HTTP metody
-    allow_headers=["*"],  # Povolit všechny hlavičky
+    allow_origins=["*"],
+    allow_credentials=False, # Změněno na False pro kompatibilitu s allow_origins="*"
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
