@@ -229,48 +229,45 @@ def reconciliation_scan():
                 continue
             
             print(f"[SCAN] Skenuji SMB sdílenou složku: {path}")
-            init_smb_session(path)
             
             try:
-                # Procházení SMB složky
                 # Normalizujeme UNC cestu pro získání hostitele a doplnění FQDN
                 norm_path_for_host = path.replace("\\", "/")
                 host_netbios_for_walk = norm_path_for_host.lstrip("/").split("/")[0]
                 host_fqdn_for_walk = _get_fqdn_host(host_netbios_for_walk)
                 path_fqdn_for_walk = path.replace(host_netbios_for_walk, host_fqdn_for_walk, 1)
 
+                # Inicializace SMB session pro FQDN hosta
+                init_smb_session(path_fqdn_for_walk) # Předáme upravenou cestu
+
                 # Procházení SMB složky s FQDN cestou
-                # smbclient.walk vrací (dirpath, dirnames, filenames)
                 for dirpath, _, filenames in smbclient.walk(path_fqdn_for_walk):
                     for filename in filenames:
-                        # Filtrujeme pouze dokumenty
-                        if not filename.lower().endswith(('.pdf', '.docx', '.xlsx')):
+                        if not filename.lower().endswith((".pdf", ".docx", ".xlsx")):
                             continue
                         
-                        full_unc = os.path.join(dirpath, filename)
+                        full_unc = os.path.join(dirpath, filename).replace("\\", "/") # Normalizace cesty
                         mtime, size = get_smb_file_info(full_unc)
                         if mtime is None:
+                            print(f"[WARN] Nelze získat informace o souboru {full_unc}. Přeskakuji.")
                             continue
                         
-                        # Unikátní klíč pro manifest
                         file_key = full_unc
                         new_manifest[file_key] = {"mtime": mtime, "size": size}
                         
-                        # Kontrola změn
                         old_info = manifest.get(file_key)
                         if not old_info or old_info.get("mtime") != mtime or old_info.get("size") != size:
+                            print(f"[INFO] Indexuji nebo aktualizuji: {full_unc}")
                             success = process_smb_file(full_unc)
                             if not success:
-                                # Pokud se nepodařilo zaindexovat, zachováme staré info, abychom to zkusili příště
                                 if old_info:
                                     new_manifest[file_key] = old_info
                                 else:
                                     new_manifest.pop(file_key, None)
-            except Exception as e:
-                print(f"[ERROR] Selhalo procházení SMB složky {path}: {e}")
+            except (smbclient.exceptions.SMBException, smbclient.exceptions.SessionError, Exception) as e:
+                print(f"[ERROR] Selhalo skenování UNC cesty {path}: {e}")
                 
         else:
-            # Standardní lokální cesta
             if not os.path.exists(path):
                 print(f"[WARN] Lokální cesta neexistuje: {path}")
                 continue
