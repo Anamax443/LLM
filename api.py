@@ -299,8 +299,18 @@ async def extract_files(files: list[UploadFile] = File(...)):
         ctype = (f.content_type or "")
         text = ""
         try:
-            if ext in (".txt", ".md", ".csv", ".log"):
+            if ext in (".txt", ".md", ".csv", ".log", ".ps1"):
                 text = data.decode("utf-8", errors="replace")
+            elif ext == ".html":
+                # Pro HTML soubory načteme obsah a zkusíme odstranit HTML tagy, pokud je k dispozici BeautifulSoup
+                try:
+                    from bs4 import BeautifulSoup
+                    soup = BeautifulSoup(data.decode("utf-8", errors="replace"), "html.parser")
+                    text = soup.get_text(separator=" ")
+                except ImportError:
+                    text = data.decode("utf-8", errors="replace") # Pokud BeautifulSoup není, načíst jako prostý text
+                except Exception as he:
+                    text = f"[chyba parsování HTML přílohy: {he}]"
             elif ext == ".docx":
                 import docx
                 text = "\n".join(p.text for p in docx.Document(io.BytesIO(data)).paragraphs)
