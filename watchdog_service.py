@@ -71,6 +71,9 @@ def extract_text(file_path):
                     page_text = page.extract_text()
                     if page_text: 
                         text += page_text + "\n"
+        elif ext in (".txt", ".md", ".csv", ".log", ".ps1", ".html", ".htm", ".xml", ".json", ".ini", ".conf"):
+            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
     except Exception as e: 
         return f"CHYBA: {e}"
     return text
