@@ -17,7 +17,7 @@ You ask in natural language (e.g. *"how do I restore a server from backup?"*) �
 - **Ingest:** `watchdog_service.py` watches `incoming/`, atomic-moves to `docs/` (to avoid SMB locks), reads DOCX/XLSX/PDF, chunks (1000/200) and upserts into Qdrant.
 - **API:** `api.py` (FastAPI, port 8000) — `POST /ask` (streamed), `GET /api/version`, `POST /api/verify` (path availability + dynamic mount), `POST /api/extract` (text from attachments), serves the web UI. Nově: `GET /api/monitored_paths` and `POST /api/set_monitored_paths` pro správu cest z WebUI, vylepšené logování chyb a health checky pro Qdrant a Ollama při startu API, opravené CORS pro WebUI.
 - **CLI:** `ask_ai.py` — query from the terminal.
-- **Web UI:** `web/index.html` — homepage with Assistant / Settings / Documentation / Management report tabs (per the AXIMA UI standard: dark+light, print in light, CS+EN, **service line in the header** — health, model, commit, clock, GitHub link). Nyní **komunikuje s backendem** pro načítání a ukládání monitorovaných cest.
+- **Web UI:** `web/index.html` — homepage with Assistant / Settings / Documentation / Management report tabs (per the AXIMA UI standard: dark+light, print in light, CS+EN, **service line in the header** — health, model, commit, clock, GitHub link). Nyní **komunikuje s backendem** pro načítání a ukládání monitorovaných cest. Newly launched as `axima-web.service` via systemd.
 
 ## Files
 

@@ -2,7 +2,7 @@
 
 Živý pracovní dokument. **Aktualizuje se po každé změně + commit** (aby se dalo navázat z jiného stroje / mezi lidmi — na projektu se pracuje společně, commituje i kolega `stepancerny1-cyber`).
 
-**Poslední aktualizace:** 2026-07-07 (Aktualizace parametrů Qdrant kolekce, sjednocení embedding modelu, úprava systémového promptu)
+**Poslední aktualizace:** 2026-07-07 (Aktualizace parametrů Qdrant kolekce, sjednocení embedding modelu, úprava systémového promptu, přidání axima-web.service)
 
 ---
 

@@ -33,7 +33,7 @@ Síťové cesty (dynamicky mountované)             │  watchdog_service.py  (i
 - **Ingest:** `watchdog_service.py` sleduje `incoming/`, atomic-move do `docs/` (kvůli SMB zámkům), čte DOCX/XLSX/PDF, chunkuje (1000/200) a upsertuje do Qdrantu.
 - **API:** `api.py` (FastAPI, port 8000) — `POST /ask` (streamovaně), `GET /api/version`, `POST /api/verify` (dostupnost cest + dynamic mount), `POST /api/extract` (text z příloh), servíruje web UI. Nově: `GET /api/monitored_paths` a `POST /api/set_monitored_paths` pro správu cest z WebUI, vylepšené logování chyb a health checky pro Qdrant a Ollama při startu API, opravené CORS pro WebUI.
 - **CLI:** `ask_ai.py` — dotaz z terminálu.
-- **Web UI:** `web/index.html` — homepage se záložkami Asistent / Nastavení / Dokumentace / Manažerský výstup (dle AXIMA UI standardu: dark+light, tisk light, CZ+EN, **servisní řádek v hlavičce** — health, model, commit, hodiny, GitHub odkaz). Nyní **komunikuje s backendem** pro načítání a ukládání monitorovaných cest.
+- **Web UI:** `web/index.html` — homepage se záložkami Asistent / Nastavení / Dokumentace / Manažerský výstup (dle AXIMA UI standardu: dark+light, tisk light, CZ+EN, **servisní řádek v hlavičce** — health, model, commit, hodiny, GitHub odkaz). Nyní **komunikuje s backendem** pro načítání a ukládání monitorovaných cest. Nově spouštěno jako `axima-web.service` přes systemd.
 
 ## Soubory
 
