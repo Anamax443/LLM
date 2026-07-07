@@ -148,7 +148,7 @@ def ask_ai_endpoint(req: QueryRequest):
             search_result = client.query_points(
                 collection_name=COLLECTION_NAME,
                 query=vector,
-                limit=1,
+                limit=4,
                 score_threshold=0.50 # Zvýšeno skóre threshold pro přesnější výsledky, nebo zakomentovat pro spolehnutí pouze na limit=2
             ).points
         except Exception as e:
