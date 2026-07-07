@@ -82,7 +82,7 @@ def get_embedding(text):
     """Zavolá lokální Ollamu pro převod textu na vektor."""
     try:
         response = requests.post(OLLAMA_URL, json={
-            "model": "nomic-embed-text",
+            "model": "bge-m3",
             "prompt": text
         }, timeout=10)
         if response.status_code == 200:

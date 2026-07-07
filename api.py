@@ -70,7 +70,7 @@ def _git(*args):
 QDRANT_URL = "http://localhost:6333"
 OLLAMA_URL = "http://localhost:11434/api"
 COLLECTION_NAME = "axima_docs"
-CHAT_MODEL = "llama3.1"
+CHAT_MODEL = "mistral-nemo"
 
 # Bezpečnostní pravidla (guardrails) — verzovaná v gitu, měnit jen přes review.
 # Jdou do pole "system" (odděleně od uživatelského vstupu), aby je nešlo přepsat dotazem.
