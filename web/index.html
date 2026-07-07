@@ -313,19 +313,19 @@
       <div class="row">
         <label class="field" style="flex:1; min-width:180px;">
           <span data-i18n="settings.chatModel">Generativní model</span>
-          <input type="text" id="setModel" value="llama3.1">
+          <input type="text" id="setModel" value="">
         </label>
         <label class="field" style="flex:1; min-width:180px;">
           <span data-i18n="settings.embModel">Embedding model</span>
-          <input type="text" id="setEmb" value="nomic-embed-text">
+          <input type="text" id="setEmb" value="" disabled="true">
         </label>
         <label class="field" style="width:130px;">
           <span data-i18n="settings.temp">Teplota</span>
-          <input type="number" id="setTemp" value="0.1" step="0.1" min="0" max="1">
+          <input type="number" id="setTemp" value="" step="0.1" min="0" max="1">
         </label>
         <label class="field" style="width:130px;">
           <span data-i18n="settings.limit">Bloků kontextu</span>
-          <input type="number" id="setLimit" value="6" min="1" max="20">
+          <input type="number" id="setLimit" value="" min="1" max="20">
         </label>
       </div>
       <div class="row" style="margin-top:6px; gap:20px;">
@@ -1016,8 +1016,8 @@ document.getElementById("question").addEventListener("paste", e => {
 function applyHeaderExtras(){
   const showModel = localStorage.getItem("axima.hdr.model") !== "0";
   const showGh = localStorage.getItem("axima.hdr.github") !== "0";
-  const mn = document.getElementById("hdrModelName"), sm = document.getElementById("setModel");
-  if (mn && sm) mn.textContent = sm.value || "llama3.1";
+   const mn = document.getElementById("hdrModelName"), sm = document.getElementById("setModel");
+   if (mn && sm) mn.textContent = sm.value || "—";
   const m = document.getElementById("hdrModel"), g = document.getElementById("hdrGithub");
   if (m) m.style.display = showModel ? "" : "none";
   if (g) g.style.display = showGh ? "" : "none";
@@ -1079,7 +1079,28 @@ applyHeaderExtras();
 
     /* ================= Init ================= */
     window.chatHistory = []; // Inicializace historie chatu
-    applyTheme(); applyLang(); loadVersion(); loadPaths(); tick(); setInterval(tick, 1000);
+     let config = {}; // Global variable to store config
+     async function loadConfig() {
+       try {
+         const response = await fetch("/config");
+         if (!response.ok) throw new Error("Backend error");
+         config = await response.json();
+         document.getElementById("setModel").value = config.chat_model;
+         document.getElementById("setEmb").value = config.embedding_model;
+         document.getElementById("setLimit").value = config.qdrant_limit;
+         document.getElementById("setTemp").value = config.temperature;
+         applyHeaderExtras();
+       } catch (e) {
+         console.error("Nepodařilo se načíst konfiguraci z backendu:", e);
+         // Fallback to hardcoded defaults if backend is unavailable
+         document.getElementById("setModel").value = "llama3.1";
+         document.getElementById("setEmb").value = "nomic-embed-text";
+         document.getElementById("setLimit").value = "6";
+         document.getElementById("setTemp").value = "0.1";
+         applyHeaderExtras();
+       }
+     }
+     applyTheme(); applyLang(); loadVersion(); loadPaths(); loadConfig(); tick(); setInterval(tick, 1000);
 </script>
 </body>
 </html>

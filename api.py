@@ -218,6 +218,16 @@ def ask_ai_endpoint(req: QueryRequest):
 
 
 
+@app.get("/config")
+def get_config():
+    """Vrátí aktuální konfiguraci backendu pro WebUI."""
+    return {
+        "chat_model": CHAT_MODEL,
+        "embedding_model": "bge-m3", # Hardcoded pro embedding, nelze měnit za běhu
+        "qdrant_limit": 4,
+        "temperature": 0.0
+    }
+
 @app.get("/api/version")
 def version():
     """Servisní kontrakt pro patičku UI (AXIMA UI standard)."""
