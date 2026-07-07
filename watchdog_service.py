@@ -318,7 +318,7 @@ def _scan_smb_path(path, collection_name, manifest, new_manifest):
                             new_manifest[file_key] = old_info
                         else:
                             new_manifest.pop(file_key, None)
-    except (smbclient.exceptions.SMBException, smbclient.exceptions.SessionError, Exception) as e:
+    except Exception as e:
         print(f"[ERROR] Selhání uvnitř _scan_smb_path pro cestu {path}: {e}")
 
 
