@@ -23,7 +23,7 @@ qdrant = QdrantClient(QDRANT_URL)
 if not qdrant.collection_exists(COLLECTION_NAME):
     qdrant.create_collection(
         collection_name=COLLECTION_NAME,
-        vectors_config=VectorParams(size=768, distance=Distance.COSINE),
+        vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
     )
     print(f"[INIT] Vytvořena nová databázová kolekce '{COLLECTION_NAME}'.")
 
