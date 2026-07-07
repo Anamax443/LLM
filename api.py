@@ -179,6 +179,7 @@ def ask_ai_endpoint(req: QueryRequest):
                 for msg in req.history:
                     messages.append({"role": msg.role, "content": msg.content})
             
+            messages.append({"role": "system", "content": SYSTEM_PROMPT})
             messages.append({"role": "user", "content": f"KONTEXT:\n{context}\n\nOTÁZKA: {req.question}"})
 
             # ... (zbytek logiky pro odesílání dotazu do Ollamy)
@@ -197,8 +198,9 @@ def ask_ai_endpoint(req: QueryRequest):
                     for line in resp.iter_lines():
                         if line:
                             chunk = json.loads(line.decode("utf-8"))
-                            token = chunk.get("response", "")
-                            yield f"data: {json.dumps({"token": token}, ensure_ascii=False)}\n\n"
+                            token = chunk.get("message", {}).get("content", "")
+                            if token:
+                                yield f"data: {json.dumps({"token": token}, ensure_ascii=False)}\n\n"
                 else:
                     yield f"data: {json.dumps({"error": f"Model neodpověděl (HTTP {resp.status_code})."}, ensure_ascii=False)}\n\n"
             except requests.exceptions.ConnectionError:
