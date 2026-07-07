@@ -130,7 +130,7 @@ class VerifyRequest(BaseModel):
     paths: list[str]
 
 def get_embedding(text):
-    resp = requests.post(f"{OLLAMA_URL}/embeddings", json={"model": "nomic-embed-text", "prompt": text})
+    resp = requests.post(f"{OLLAMA_URL}/embeddings", json={"model": "bge-m3", "prompt": text})
     if resp.status_code == 200:
         return resp.json().get("embedding")
     return None
