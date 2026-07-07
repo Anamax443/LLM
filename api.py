@@ -148,8 +148,8 @@ def ask_ai_endpoint(req: QueryRequest):
             search_result = client.query_points(
                 collection_name=COLLECTION_NAME,
                 query=vector,
-                limit=10,
-                score_threshold=0.35
+                limit=2,
+                score_threshold=0.50 # Zvýšeno skóre threshold pro přesnější výsledky, nebo zakomentovat pro spolehnutí pouze na limit=2
             ).points
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Chyba databáze Qdrant: {str(e)}")

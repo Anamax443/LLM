@@ -28,8 +28,8 @@ Síťové cesty (dynamicky mountované)             │  watchdog_service.py  (i
    4 záložky)     ◄──odpověď + zdroje──
 ```
 
-- **AI backend:** [Ollama](https://ollama.com) (port 11434) — `nomic-embed-text` (768D embeddingy) + `llama3.1` (generování).
-- **Vektorová DB:** [Qdrant](https://qdrant.tech) (port 6333), kolekce `axima_docs`, 768D, kosinová vzdálenost.
+- **AI backend:** [Ollama](https://ollama.com) (port 11434) — `bge-m3` (1024D embeddingy) + `llama3.1` (generování).
+- **Vektorová DB:** [Qdrant](https://qdrant.tech) (port 6333), kolekce `axima_docs`, 1024D, kosinová vzdálenost.
 - **Ingest:** `watchdog_service.py` sleduje `incoming/`, atomic-move do `docs/` (kvůli SMB zámkům), čte DOCX/XLSX/PDF, chunkuje (1000/200) a upsertuje do Qdrantu.
 - **API:** `api.py` (FastAPI, port 8000) — `POST /ask` (streamovaně), `GET /api/version`, `POST /api/verify` (dostupnost cest + dynamic mount), `POST /api/extract` (text z příloh), servíruje web UI. Nově: `GET /api/monitored_paths` a `POST /api/set_monitored_paths` pro správu cest z WebUI, vylepšené logování chyb a health checky pro Qdrant a Ollama při startu API, opravené CORS pro WebUI.
 - **CLI:** `ask_ai.py` — dotaz z terminálu.

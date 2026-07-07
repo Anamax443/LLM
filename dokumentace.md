@@ -4,7 +4,7 @@
 Projekt slouží k automatizovanému načítání, vektorizaci a dotazování interních firemních dokumentů (bez odesílání dat do cloudu, připraveno pro ISO27001).
 - **Vstupní bod:** Sledované cesty jsou konfigurovány v UI a načítány z FastAPI (`GET /api/monitored_paths`). Podporuje lokální složky i UNC cesty (`\\server\share`) přes User-Space SMB s Kerberos autentizací.
 - **Zpracování:** Soubory (DOCX, XLSX, PDF, TXT, PS1, HTML, a další textové formáty) jsou skrze "Atomic Move" (jen u lokálních) nebo stažením do `tempfile.TemporaryDirectory` (u SMB) přečteny a rozsekány na textové bloky pomocí `RecursiveCharacterTextSplitter`. K textu bloku se automaticky přidává prefix s názvem zdrojového dokumentu pro lepší kontextualizaci.
-- **AI Backend:** Databáze Qdrant (port 6333, kolekce `axima_docs`, vektor 768D). Modely běží přes Ollamu (port 11434). Model `nomic-embed-text` pro vektorizaci textu a `llama3.1` (8B) pro generování odpovědí.
+- **AI Backend:** Databáze Qdrant (port 6333, kolekce `axima_docs`, vektor 1024D). Modely běží přes Ollamu (port 11434). Model `bge-m3` pro vektorizaci textu a `llama3.1` (8B) pro generování odpovědí.
 
 ## 2. Instalace a Provoz
 Systém běží uvnitř Python virtual environment (`venv`).

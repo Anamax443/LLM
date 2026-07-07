@@ -12,8 +12,8 @@ You ask in natural language (e.g. *"how do I restore a server from backup?"*) �
 
 ## Architecture
 
-- **AI backend:** [Ollama](https://ollama.com) (port 11434) — `nomic-embed-text` (768D embeddings) + `llama3.1` (generation).
-- **Vector DB:** [Qdrant](https://qdrant.tech) (port 6333), collection `axima_docs`, 768D, cosine distance.
+- **AI backend:** [Ollama](https://ollama.com) (port 11434) — `bge-m3` (1024D embeddings) + `llama3.1` (generation).
+- **Vector DB:** [Qdrant](https://qdrant.com) (port 6333), collection `axima_docs`, 1024D, cosine distance.
 - **Ingest:** `watchdog_service.py` watches `incoming/`, atomic-moves to `docs/` (to avoid SMB locks), reads DOCX/XLSX/PDF, chunks (1000/200) and upserts into Qdrant.
 - **API:** `api.py` (FastAPI, port 8000) — `POST /ask` (streamed), `GET /api/version`, `POST /api/verify` (path availability + dynamic mount), `POST /api/extract` (text from attachments), serves the web UI. Nově: `GET /api/monitored_paths` and `POST /api/set_monitored_paths` pro správu cest z WebUI, vylepšené logování chyb a health checky pro Qdrant a Ollama při startu API, opravené CORS pro WebUI.
 - **CLI:** `ask_ai.py` — query from the terminal.
