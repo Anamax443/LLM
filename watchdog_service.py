@@ -294,7 +294,7 @@ def _scan_smb_path(path, collection_name, manifest, new_manifest):
         for dirpath, _, filenames in smbclient.walk(win_path_fqdn):
             for filename in filenames:
                 print(f"[DEBUG] Nalezen soubor: {filename} v {dirpath}")
-                if not filename.lower().endswith((".pdf", ".docx", ".xlsx", ".txt", ".ps1", ".html")):
+                if not filename.lower().endswith((".pdf", ".docx")):
                     print(f"[DEBUG] Soubor {filename} ignorován (nepodporovaná přípona).")
                     continue
                 
@@ -330,7 +330,7 @@ def _scan_local_path(path, collection_name, manifest, new_manifest):
     print(f"[SCAN] Skenuji lokální složku: {path}")
     for root, _, filenames in os.walk(path):
         for filename in filenames:
-            if not filename.lower().endswith((".pdf", ".docx", ".xlsx", ".txt", ".ps1", ".html")):
+            if not filename.lower().endswith((".pdf", ".docx")):
                 continue
             
             full_local = os.path.join(root, filename).replace("\\", "/")
