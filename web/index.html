@@ -828,140 +828,151 @@ function renderMarkdown(text) {
 }
 
 async function ask(){
-  const qInput = document.getElementById("question");
-  const q = qInput.value.trim();
-  if (!q && attachments.length === 0) return;
+    const qInput = document.getElementById("question");
+    const q = qInput.value.trim();
+    if (!q && attachments.length === 0) return;
 
-  qInput.value = "";
-  const sending = attachments.slice();   // snapshot příloh k odeslání
-  attachments = []; renderAttach();
-  
-  const chatHistory = document.getElementById("chatHistory");
-  const askBtn = document.getElementById("askBtn");
-  const stopBtn = document.getElementById("stopBtn");
-  
-  // Odstranit placeholder při prvním dotazu
-  const ph = document.getElementById("assistant-ph-text");
-  if (ph) ph.remove();
-  
-  // 1. Přidat bublinu uživatele
-  const userDiv = document.createElement("div");
-  userDiv.className = "chat-bubble user-bubble";
-  userDiv.textContent = q || (lang === "cs" ? "(příloha)" : "(attachment)");
-  if (sending.length) {
-    const at = document.createElement("div"); at.className = "sources";
-    sending.forEach(a => { const c = document.createElement("span"); c.className = "source-chip"; c.textContent = (a.kind === "image" ? "🖼 " : "📎 ") + a.name; at.appendChild(c); });
-    userDiv.appendChild(at);
-  }
-  chatHistory.appendChild(userDiv);
-  chatHistory.scrollTop = chatHistory.scrollHeight;
-  
-  // 2. Přidat bublinu pro odpověď AI (s indikací přemýšlení)
-  const aiDiv = document.createElement("div");
-  aiDiv.className = "chat-bubble ai-bubble";
-  aiDiv.innerHTML = `<span class="thinking-text">${t("assistant.thinking")}</span>`;
-  chatHistory.appendChild(aiDiv);
-  chatHistory.scrollTop = chatHistory.scrollHeight;
-  
-  // Nastavit tlačítka
-  askBtn.style.display = "none";
-  stopBtn.style.display = "";
-  
-  abortController = new AbortController();
-  let fullText = "";
-  let sourcesDiv = null;
-  
-  try {
-    let question = q;
+    qInput.value = "";
+    const sending = attachments.slice();   // snapshot příloh k odeslání
+    attachments = []; renderAttach();
+    
+    const chatHistoryDiv = document.getElementById("chatHistory");
+    const askBtn = document.getElementById("askBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    
+    // Odstranit placeholder při prvním dotazu
+    const ph = document.getElementById("assistant-ph-text");
+    if (ph) ph.remove();
+    
+    // Přidat bublinu uživatele
+    const userDiv = document.createElement("div");
+    userDiv.className = "chat-bubble user-bubble";
+    userDiv.textContent = q || (lang === "cs" ? "(příloha)" : "(attachment)");
     if (sending.length) {
-      aiDiv.innerHTML = `<span class="thinking-text">${lang === "cs" ? "Zpracovávám přílohy…" : "Processing attachments…"}</span>`;
-      try {
-        const fd = new FormData();
-        sending.forEach(a => fd.append("files", a.file, a.name));
-        const er = await fetch("/api/extract", { method: "POST", body: fd, signal: abortController.signal });
-        if (!er.ok) throw new Error("extract");
-        const parts = await er.json();
-        question = (q || (lang === "cs" ? "Vysvětli obsah přílohy." : "Explain the attachment.")) + parts.map(p => `\n\n[Příloha: ${p.name}]\n${p.text}`).join("");
-      } catch (ex) {
-        if (ex.name === "AbortError") throw ex;
-        question = q;   // extrakce nedostupná (offline / chybí OCR) — pošle se aspoň text dotazu
-      }
-      aiDiv.innerHTML = `<span class="thinking-text">${t("assistant.thinking")}</span>`;
+      const at = document.createElement("div"); at.className = "sources";
+      sending.forEach(a => { const c = document.createElement("span"); c.className = "source-chip"; c.textContent = (a.kind === "image" ? "🖼 " : "📎 ") + a.name; at.appendChild(c); });
+      userDiv.appendChild(at);
     }
-    const r = await fetch("/ask", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
-      signal: abortController.signal
-    });
+    chatHistoryDiv.appendChild(userDiv);
     
-    if (!r.ok) throw new Error("backend");
+    // Uložit zprávu do historie
+    window.chatHistory.push({ role: "user", content: userDiv.textContent });
     
-    const reader = r.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buffer = "";
+    chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
     
-    aiDiv.innerHTML = ""; // smazat "AI generuje..."
+    // Přidat bublinu pro odpověď AI (s indikací přemýšlení)
+    const aiDiv = document.createElement("div");
+    aiDiv.className = "chat-bubble ai-bubble";
+    aiDiv.innerHTML = `<span class="thinking-text">${t("assistant.thinking")}</span>`;
+    chatHistoryDiv.appendChild(aiDiv);
+    chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
     
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
+    // Nastavit tlačítka
+    askBtn.style.display = "none";
+    stopBtn.style.display = "";
+    
+    abortController = new AbortController();
+    let fullText = "";
+    let sourcesDiv = null;
+    
+    try {
+      let question = q;
+      if (sending.length) {
+        aiDiv.innerHTML = `<span class="thinking-text">${lang === "cs" ? "Zpracovávám přílohy…" : "Processing attachments…"}</span>`;
+        try {
+          const fd = new FormData();
+          sending.forEach(a => fd.append("files", a.file, a.name));
+          const er = await fetch("/api/extract", { method: "POST", body: fd, signal: abortController.signal });
+          if (!er.ok) throw new Error("extract");
+          const parts = await er.json();
+          question = (q || (lang === "cs" ? "Vysvětli obsah přílohy." : "Explain the attachment.")) + parts.map(p => `\n\n[Příloha: ${p.name}]\n${p.text}`).join("");
+        } catch (ex) {
+          if (ex.name === "AbortError") throw ex;
+          question = q;   // extrakce nedostupná (offline / chybí OCR) — pošle se aspoň text dotazu
+        }
+        aiDiv.innerHTML = `<span class="thinking-text">${t("assistant.thinking")}</span>`;
+      }
+
+      // Omezit historii na posledních 6 zpráv (3 dvojice uživatel/AI)
+      const historyToSend = window.chatHistory.slice(-6);
+
+      const r = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, history: historyToSend }),
+        signal: abortController.signal
+      });
       
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop(); // ponechat si zbytek řádku v bufferu
+      if (!r.ok) throw new Error("backend");
       
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith("data: ")) {
-          try {
-            const data = JSON.parse(trimmed.substring(6));
-            
-            if (data.sources) {
-              sourcesDiv = document.createElement("div");
-              sourcesDiv.className = "sources";
-              data.sources.forEach(s => {
-                const c = document.createElement("span");
-                c.className = "source-chip";
-                c.textContent = "📄 " + s;
-                sourcesDiv.appendChild(c);
-              });
-            } else if (data.token !== undefined) {
-              fullText += data.token;
-              aiDiv.innerHTML = renderMarkdown(fullText);
-              if (sourcesDiv) {
-                aiDiv.appendChild(sourcesDiv);
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      
+      aiDiv.innerHTML = ""; // smazat "AI generuje..."
+      
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // ponechat si zbytek řádku v bufferu
+        
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(trimmed.substring(6));
+              
+              if (data.sources) {
+                sourcesDiv = document.createElement("div");
+                sourcesDiv.className = "sources";
+                data.sources.forEach(s => {
+                  const c = document.createElement("span");
+                  c.className = "source-chip";
+                  c.textContent = "📄 " + s;
+                  sourcesDiv.appendChild(c);
+                });
+              } else if (data.token !== undefined) {
+                fullText += data.token;
+                aiDiv.innerHTML = renderMarkdown(fullText);
+                if (sourcesDiv) {
+                  aiDiv.appendChild(sourcesDiv);
+                }
+                chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+              } else if (data.error) {
+                aiDiv.innerHTML = `<span style="color: var(--err)">${data.error}</span>`;
               }
-              chatHistory.scrollTop = chatHistory.scrollHeight;
-            } else if (data.error) {
-              aiDiv.innerHTML = `<span style="color: var(--err)">${data.error}</span>`;
+            } catch (err) {
+              console.error("Chyba parsování JSON řádku:", err, trimmed);
             }
-          } catch (err) {
-            console.error("Chyba parsování JSON řádku:", err, trimmed);
           }
         }
       }
+    } catch (e) {
+      if (e.name === "AbortError") {
+        aiDiv.innerHTML = renderMarkdown(fullText + "\n\n*(Generování přerušeno uživatelem)*");
+        if (sourcesDiv) aiDiv.appendChild(sourcesDiv);
+      } else {
+        aiDiv.innerHTML = "";
+          const errSpan = document.createElement("span");
+          errSpan.style.color = "var(--err)";
+          errSpan.textContent = lang === "cs"
+            ? "Chyba: Nepodařilo se spojit s backendem."
+            : "Error: Could not connect to backend.";
+          aiDiv.appendChild(errSpan);
+      }
+      chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+    } finally {
+      // Uložit odpověď AI do historie
+      window.chatHistory.push({ role: "assistant", content: fullText });
+
+      askBtn.style.display = "";
+      stopBtn.style.display = "none";
+      abortController = null;
     }
-  } catch (e) {
-    if (e.name === "AbortError") {
-      aiDiv.innerHTML = renderMarkdown(fullText + "\n\n*(Generování přerušeno uživatelem)*");
-      if (sourcesDiv) aiDiv.appendChild(sourcesDiv);
-    } else {
-      aiDiv.innerHTML = "";
-        const errSpan = document.createElement("span");
-        errSpan.style.color = "var(--err)";
-        errSpan.textContent = lang === "cs"
-          ? "Chyba: Nepodařilo se spojit s backendem."
-          : "Error: Could not connect to backend.";
-        aiDiv.appendChild(errSpan);
-    }
-    chatHistory.scrollTop = chatHistory.scrollHeight;
-  } finally {
-    askBtn.style.display = "";
-    stopBtn.style.display = "none";
-    abortController = null;
   }
-}
 
 document.getElementById("askBtn").onclick = ask;
 document.getElementById("stopBtn").onclick = () => {
@@ -1067,6 +1078,7 @@ applyHeaderExtras();
    }
 
     /* ================= Init ================= */
+    window.chatHistory = []; // Inicializace historie chatu
     applyTheme(); applyLang(); loadVersion(); loadPaths(); tick(); setInterval(tick, 1000);
 </script>
 </body>

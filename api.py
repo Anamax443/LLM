@@ -120,8 +120,15 @@ def init_smb_session_for_path(unc_path):
 
 
 
+from typing import List, Optional
+
+class Message(BaseModel):
+    role: str
+    content: str
+
 class QueryRequest(BaseModel):
     question: str
+    history: Optional[List[Message]] = None
 
 class QueryResponse(BaseModel):
     answer: str
@@ -167,19 +174,22 @@ def ask_ai_endpoint(req: QueryRequest):
                 yield f"data: {json.dumps({"error": "Nenašel jsem v databázi relevantní dokumenty."}, ensure_ascii=False)}\n\n"
                 return
 
-            prompt = f"""KONTEXT:
-{context}
+            messages = []
+            if req.history:
+                for msg in req.history:
+                    messages.append({"role": msg.role, "content": msg.content})
+            
+            messages.append({"role": "user", "content": f"KONTEXT:\n{context}\n\nOTÁZKA: {req.question}"})
 
-OTÁZKA: {req.question}
-"""
+            # ... (zbytek logiky pro odesílání dotazu do Ollamy)
             try:
                 resp = requests.post(
-                    f"{OLLAMA_URL}/generate",
+                    f"{OLLAMA_URL}/chat",
                     json={
                         "model": CHAT_MODEL,
-                        "system": SYSTEM_PROMPT,
-                        "prompt": prompt,
-                        "stream": True
+                        "messages": messages,
+                        "stream": True,
+                        "options": {"temperature": 0.0}
                     },
                     stream=True
                 )
