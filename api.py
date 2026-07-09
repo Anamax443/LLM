@@ -3,6 +3,8 @@ import subprocess
 from datetime import datetime, timezone
 import tempfile
 import json
+from dotenv import load_dotenv
+load_dotenv()
 
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
