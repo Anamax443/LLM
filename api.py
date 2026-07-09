@@ -16,7 +16,7 @@ try:
 except ImportError:
     HAS_SMBCLIENT = False
 import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware # Import CORSMiddleware
@@ -24,6 +24,9 @@ from pydantic import BaseModel
 import requests
 import traceback
 from qdrant_client import QdrantClient
+from fastapi import File, UploadFile
+import io
+from pypdf import PdfReader
 
 app = FastAPI(title="AXIMA RAG API", version="1.1")
 
@@ -356,48 +359,38 @@ def set_monitored_paths_endpoint(paths: list[str]):
 
 
 @app.post("/api/extract")
-async def extract_files(files: list[UploadFile] = File(...)):
-    """Vytáhne text z příloh k dotazu: dokumenty přes parsery, obrázky/screenshoty
-    přes OCR (pytesseract, pokud je na serveru). Vrací [{name, text}]."""
-    import io
-    out = []
-    for f in files:
-        data = await f.read()
-        name = f.filename or "soubor"
-        ext = os.path.splitext(name)[1].lower()
-        ctype = (f.content_type or "")
+async def extract_files(request: Request, files: list[UploadFile] = File(...)):
+    # Bezpečnostní kontrola - pouze přihlášení uživatelé
+    if not request.session.get("user"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    extracted_data = []
+    for file in files:
+        content = await file.read()
         text = ""
-        try:
-            if ext in (".txt", ".md", ".csv", ".log", ".ps1", ".bat", ".cmd", ".ini", ".conf", ".json", ".xml", ".html", ".htm"):
-                text = data.decode("utf-8", errors="replace")
-            elif ext == ".docx":
-                import docx
-                text = "\n".join(p.text for p in docx.Document(io.BytesIO(data)).paragraphs)
-            elif ext == ".xlsx":
-                import openpyxl
-                rows = []
-                wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
-                for sh in wb.worksheets:
-                    for row in sh.iter_rows(values_only=True):
-                        rows.append(" ".join(str(c) for c in row if c is not None))
-                text = "\n".join(rows)
-            elif ext == ".pdf":
-                import pdfplumber
-                with pdfplumber.open(io.BytesIO(data)) as pdf:
-                    text = "\n".join((pg.extract_text() or "") for pg in pdf.pages)
-            elif ctype.startswith("image/") or ext in (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tif", ".tiff"):
-                try:
-                    import pytesseract
-                    from PIL import Image
-                    text = pytesseract.image_to_string(Image.open(io.BytesIO(data)), lang="ces+eng")
-                except Exception as oe:
-                    text = f"[OCR na serveru není k dispozici ({oe}). Nainstaluj tesseract-ocr + balík ces.]"
-            else:
-                text = f"[nepodporovaný typ přílohy: {ext or ctype}]"
-        except Exception as e:
-            text = f"[chyba čtení přílohy: {e}]"
-        out.append({"name": name, "text": text.strip()[:20000]})
-    return out
+        
+        if file.filename.lower().endswith(".pdf"):
+            try:
+                pdf = PdfReader(io.BytesIO(content))
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+            except Exception as e:
+                text = f"Chyba při čtení PDF: {str(e)}"
+        else:
+            # Fallback pro běžné textové soubory (txt, csv, md)
+            try:
+                text = content.decode("utf-8")
+            except:
+                text = "Tento formát souboru zatím plně nepodporujeme nebo není textový."
+        
+        extracted_data.append({
+            "name": file.filename,
+            "text": text.strip()
+        })
+        
+    return extracted_data
 
 
 # Servírování web UI (index.html na kořeni). Mount se přidává poslední,
