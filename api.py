@@ -198,17 +198,21 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
         attachment_prefix = "[Příloha:"
         question_text = req.question
         attachment_content = ""
-        has_attachment = False
+        # Detekce přílohy, prohledá aktuální dotaz i historii
+        has_attachment = "[Příloha:" in req.question
+        for msg in req.history or []:  # iterujeme přes historii, pokud existuje
+            if msg.get("role") == "user" and "[Příloha:" in msg.get("content", ""):
+                has_attachment = True
+                break
 
-        if attachment_prefix in req.question:
-            has_attachment = True
-            # Rozdělení dotazu a obsahu přílohy
-            parts = req.question.split(attachment_prefix)
+        question_text = req.question
+        if "[Příloha:" in req.question:
+            # Rozdělení dotazu a obsahu přílohy z aktuálního dotazu
+            parts = req.question.split("[Příloha:")
             question_text = parts[0].strip()
-            # Zbytek je obsah přílohy, rekonstruujeme ho s původním prefixem
-            attachment_content = attachment_prefix + attachment_prefix.join(parts[1:])
+            attachment_content = "[Příloha:" + "[Příloha:".join(parts[1:])
             
-        search_result = []
+        qdrant_results = []
         if question_text: # Pouze pokud je co hledat v Qdrantu
             vector = get_embedding(question_text)
             if not vector:
@@ -216,7 +220,7 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
 
             client = QdrantClient(QDRANT_URL)
             try:
-                search_result = client.query_points(
+                qdrant_results = client.query_points(
                     collection_name=COLLECTION_NAME,
                     query=vector,
                     limit=4,
@@ -225,14 +229,14 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Chyba databáze Qdrant: {str(e)}")
 
-        raw_sources = [hit.payload["source"] for hit in search_result]
+        raw_sources = [hit.payload["source"] for hit in qdrant_results]
         unique_sources = list(set(raw_sources))
         
         # Přidáme attachment_content do kontextu, pokud existuje
         context_parts = []
         if attachment_content:
             context_parts.append(f"--- Příloha ---\n{attachment_content}")
-        context_parts.extend([f"--- Zdroj: {hit.payload['source']} ---\n{hit.payload['text']}" for hit in search_result])
+        context_parts.extend([f"--- Zdroj: {hit.payload["source"]} ---\n{hit.payload["text"]}" for hit in qdrant_results])
 
         context = "\n\n".join(context_parts)
         
@@ -240,8 +244,8 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
             # Poslat nejprve zdroje
             yield f"data: {json.dumps({"sources": unique_sources}, ensure_ascii=False)}\n\n"
             
-            # Změněná podmínka pro striktní blokádu
-            if not context.strip() and not has_attachment:
+            # Změněná podmínka pro striktní blokádu: propustí dotaz, pokud je příloha i bez Qdrant výsledků
+            if not qdrant_results and not has_attachment:
                 yield f"data: {json.dumps({"error": "Nenašel jsem v databázi relevantní dokumenty."}, ensure_ascii=False)}\n\n"
                 return
 
