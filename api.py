@@ -201,7 +201,8 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
         # Detekce přílohy, prohledá aktuální dotaz i historii
         has_attachment = "[Příloha:" in req.question
         for msg in req.history or []:  # iterujeme přes historii, pokud existuje
-            if msg.get("role") == "user" and "[Příloha:" in msg.get("content", ""):
+            # msg je Pydantic model, přistupujeme přes tečkovou notaci
+            if msg.role == "user" and msg.content and "[Příloha:" in msg.content:
                 has_attachment = True
                 break
 
