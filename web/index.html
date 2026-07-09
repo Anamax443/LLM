@@ -313,30 +313,33 @@ label.field span.help-icon:hover { color: var(--accent); border-color: var(--acc
     <div class="card">
       <h3 data-i18n="settings.model">Model a hledání</h3>
       <div class="row">
-        <label class="field" style="flex:1; min-width:180px;">
-          <div>
-            <span data-i18n="settings.chatModel">Hlavní AI model (Mozek asistenta)</span>
+        <label class="field" style="flex: 1 1 200px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+            <span data-i18n="settings.chatModel" style="display: inline; margin: 0;">Hlavní AI model (Mozek asistenta)</span>
             <span class="help-icon" title="Určuje, který jazykový model bude formulovat odpovědi. Aktuálně používáme model optimalizovaný pro podnikovou češtinu.">?</span>
           </div>
           <input type="text" id="setModel" value="">
         </label>
-        <label class="field" style="flex:1; min-width:180px;">
-          <div>
-            <span data-i18n="settings.embModel">Model pro čtení dokumentů (Zamčeno)</span>
+        
+        <label class="field" style="flex: 1 1 200px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+            <span data-i18n="settings.embModel" style="display: inline; margin: 0;">Model pro čtení dokumentů (Zamčeno)</span>
             <span class="help-icon" title="Tento model převádí firemní PDF a Wordy do matematického formátu. Změna by rozbila celou databázi, proto je toto pole pouze pro čtení.">?</span>
           </div>
           <input type="text" id="setEmb" value="" disabled="true">
         </label>
-        <label class="field" style="width:130px;">
-          <div>
-            <span data-i18n="settings.temp">Kreativita odpovědí (Teplota)</span>
+
+        <label class="field" style="flex: 1 1 200px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+            <span data-i18n="settings.temp" style="display: inline; margin: 0;">Kreativita odpovědí (Teplota)</span>
             <span class="help-icon" title="Hodnota 0 = AI se striktně drží faktů v dokumentech (doporučeno). Hodnota 1 = AI si začne vymýšlet a být kreativní (zakázáno pro firemní data).">?</span>
           </div>
           <input type="number" id="setTemp" value="" step="0.1" min="0" max="1">
         </label>
-        <label class="field" style="width:130px;">
-          <div>
-            <span data-i18n="settings.limit">Množství čteného textu (Kontext)</span>
+
+        <label class="field" style="flex: 1 1 200px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+            <span data-i18n="settings.limit" style="display: inline; margin: 0;">Množství čteného textu (Kontext)</span>
             <span class="help-icon" title="Určuje, kolik relevantních odstavců z naší firemní databáze si AI přečte, než začne odpovídat. Ideální hodnota je 4.">?</span>
           </div>
           <input type="number" id="setLimit" value="" min="1" max="20">
