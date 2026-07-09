@@ -312,20 +312,20 @@
       <h3 data-i18n="settings.model">Model a hledání</h3>
       <div class="row">
         <label class="field" style="flex:1; min-width:180px;">
-          <span data-i18n="settings.chatModel">Generativní model</span>
-          <input type="text" id="setModel" value="">
+          <span data-i18n="settings.chatModel">Hlavní AI model (Mozek asistenta)</span>
+          <input type="text" id="setModel" value="" help="Určuje, který jazykový model bude formulovat odpovědi. Aktuálně používáme model optimalizovaný pro podnikovou češtinu.">
         </label>
         <label class="field" style="flex:1; min-width:180px;">
-          <span data-i18n="settings.embModel">Embedding model</span>
-          <input type="text" id="setEmb" value="" disabled="true">
+          <span data-i18n="settings.embModel">Model pro čtení dokumentů (Zamčeno)</span>
+          <input type="text" id="setEmb" value="" disabled="true" help="Tento model převádí firemní PDF a Wordy do matematického formátu. Změna by rozbila celou databázi, proto je toto pole pouze pro čtení.">
         </label>
         <label class="field" style="width:130px;">
-          <span data-i18n="settings.temp">Teplota</span>
-          <input type="number" id="setTemp" value="" step="0.1" min="0" max="1">
+          <span data-i18n="settings.temp">Kreativita odpovědí (Teplota)</span>
+          <input type="number" id="setTemp" value="" step="0.1" min="0" max="1" help="Hodnota 0 = AI se striktně drží faktů v dokumentech (doporučeno). Hodnota 1 = AI si začne vymýšlet a být kreativní (zakázáno pro firemní data).">
         </label>
         <label class="field" style="width:130px;">
-          <span data-i18n="settings.limit">Bloků kontextu</span>
-          <input type="number" id="setLimit" value="" min="1" max="20">
+          <span data-i18n="settings.limit">Množství čteného textu (Kontext)</span>
+          <input type="number" id="setLimit" value="" min="1" max="20" help="Určuje, kolik relevantních odstavců z naší firemní databáze si AI přečte, než začne odpovídat. Ideální hodnota je 4.">
         </label>
       </div>
       <div class="row" style="margin-top:6px; gap:20px;">
