@@ -27,6 +27,7 @@ from qdrant_client import QdrantClient
 from fastapi import File, UploadFile
 import io
 from pypdf import PdfReader
+from docx import Document
 
 app = FastAPI(title="AXIMA RAG API", version="1.1")
 
@@ -193,31 +194,54 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
     if not request.session.get('user'):
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:
-        vector = get_embedding(req.question)
-        if not vector:
-            raise HTTPException(status_code=500, detail="Nelze komunikovat s modelem pro embedding.")
+        # Detekce přílohy v dotazu
+        attachment_prefix = "[Příloha:"
+        question_text = req.question
+        attachment_content = ""
+        has_attachment = False
 
-        client = QdrantClient(QDRANT_URL)
-        try:
-            search_result = client.query_points(
-                collection_name=COLLECTION_NAME,
-                query=vector,
-                limit=4,
-                score_threshold=0.50 # Zvýšeno skóre threshold pro přesnější výsledky, nebo zakomentovat pro spolehnutí pouze na limit=2
-            ).points
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Chyba databáze Qdrant: {str(e)}")
+        if attachment_prefix in req.question:
+            has_attachment = True
+            # Rozdělení dotazu a obsahu přílohy
+            parts = req.question.split(attachment_prefix)
+            question_text = parts[0].strip()
+            # Zbytek je obsah přílohy, rekonstruujeme ho s původním prefixem
+            attachment_content = attachment_prefix + attachment_prefix.join(parts[1:])
+            
+        search_result = []
+        if question_text: # Pouze pokud je co hledat v Qdrantu
+            vector = get_embedding(question_text)
+            if not vector:
+                raise HTTPException(status_code=500, detail="Nelze komunikovat s modelem pro embedding.")
+
+            client = QdrantClient(QDRANT_URL)
+            try:
+                search_result = client.query_points(
+                    collection_name=COLLECTION_NAME,
+                    query=vector,
+                    limit=4,
+                    score_threshold=0.50 # Zvýšeno skóre threshold pro přesnější výsledky, nebo zakomentovat pro spolehnutí pouze na limit=2
+                ).points
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Chyba databáze Qdrant: {str(e)}")
 
         raw_sources = [hit.payload["source"] for hit in search_result]
         unique_sources = list(set(raw_sources))
         
-        context = "\n\n".join([f"--- Zdroj: {hit.payload["source"]} ---\n{hit.payload["text"]}" for hit in search_result])
+        # Přidáme attachment_content do kontextu, pokud existuje
+        context_parts = []
+        if attachment_content:
+            context_parts.append(f"--- Příloha ---\n{attachment_content}")
+        context_parts.extend([f"--- Zdroj: {hit.payload['source']} ---\n{hit.payload['text']}" for hit in search_result])
+
+        context = "\n\n".join(context_parts)
         
         def event_generator():
             # Poslat nejprve zdroje
             yield f"data: {json.dumps({"sources": unique_sources}, ensure_ascii=False)}\n\n"
             
-            if not context.strip():
+            # Změněná podmínka pro striktní blokádu
+            if not context.strip() and not has_attachment:
                 yield f"data: {json.dumps({"error": "Nenašel jsem v databázi relevantní dokumenty."}, ensure_ascii=False)}\n\n"
                 return
 
@@ -227,7 +251,15 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
                     messages.append({"role": msg.role, "content": msg.content})
             
             messages.append({"role": "system", "content": SYSTEM_PROMPT})
-            messages.append({"role": "user", "content": f"KONTEXT:\n{context}\n\nOTÁZKA: {req.question}"})
+            messages.append({"role": "user", "content": f"KONTEXT:\n{context}\n\nOTÁZKA: {question_text}"})
+
+            messages = []
+            if req.history:
+                for msg in req.history:
+                    messages.append({"role": msg.role, "content": msg.content})
+            
+            messages.append({"role": "system", "content": SYSTEM_PROMPT})
+            messages.append({"role": "user", "content": f"KONTEXT:\n{context}\n\nOTÁZKA: {question_text}"})
 
             # ... (zbytek logiky pro odesílání dotazu do Ollamy)
             try:
@@ -378,6 +410,12 @@ async def extract_files(request: Request, files: list[UploadFile] = File(...)):
                         text += page_text + "\n"
             except Exception as e:
                 text = f"Chyba při čtení PDF: {str(e)}"
+        elif file.filename.lower().endswith(".docx"):
+            try:
+                doc = Document(io.BytesIO(content))
+                text = "\n".join([para.text for para in doc.paragraphs])
+            except Exception as e:
+                text = f"Chyba při čtení DOCX: {str(e)}"
         else:
             # Fallback pro běžné textové soubory (txt, csv, md)
             try:
