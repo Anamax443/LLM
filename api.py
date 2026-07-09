@@ -2,8 +2,12 @@ import os
 import subprocess
 from datetime import datetime, timezone
 import tempfile
-
 import json
+
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import RedirectResponse
+from authlib.integrations.starlette_client import OAuth
+from fastapi import Request, HTTPException
 try:
     import smbclient
     HAS_SMBCLIENT = True
@@ -20,6 +24,42 @@ import traceback
 from qdrant_client import QdrantClient
 
 app = FastAPI(title="AXIMA RAG API", version="1.1")
+
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "default_secret"))
+
+oauth = OAuth()
+oauth.register(
+    name='microsoft',
+    client_id=os.getenv("ENTRA_CLIENT_ID"),
+    client_secret=os.getenv("ENTRA_CLIENT_SECRET"),
+    server_metadata_url=f'https://login.microsoftonline.com/{os.getenv("ENTRA_TENANT_ID")}/v2.0/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'}
+)
+
+@app.get("/api/auth/login")
+async def auth_login(request: Request):
+    redirect_uri = request.url_for('auth_callback')
+    # Zajištění http/https podle toho, jak to běží, aby Azure neprotestoval
+    redirect_uri = str(redirect_uri).replace("http://", "https://") if "https" in str(request.url) else str(redirect_uri)
+    return await oauth.microsoft.authorize_redirect(request, redirect_uri, prompt="login")
+
+@app.get("/api/auth/callback")
+async def auth_callback(request: Request):
+    token = await oauth.microsoft.authorize_access_token(request)
+    request.session['user'] = token.get('userinfo')
+    return RedirectResponse(url="/")
+
+@app.get("/api/auth/me")
+async def auth_me(request: Request):
+    user = request.session.get('user')
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return user
+
+@app.get("/api/auth/logout")
+async def auth_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/")
 
 # Nastavení CORS
 app.add_middleware(
@@ -144,7 +184,9 @@ def get_embedding(text):
     return None
 
 @app.post("/ask")
-def ask_ai_endpoint(req: QueryRequest):
+def ask_ai_endpoint(req: QueryRequest, request: Request):
+    if not request.session.get('user'):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     try:
         vector = get_embedding(req.question)
         if not vector:
@@ -219,7 +261,9 @@ def ask_ai_endpoint(req: QueryRequest):
 
 
 @app.get("/config")
-def get_config():
+def get_config(request: Request):
+    if not request.session.get('user'):
+        raise HTTPException(status_code=401, detail="Unauthorized")
     """Vrátí aktuální konfiguraci backendu pro WebUI."""
     return {
         "chat_model": CHAT_MODEL,
