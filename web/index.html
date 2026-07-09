@@ -313,19 +313,19 @@
       <div class="row">
         <label class="field" style="flex:1; min-width:180px;">
           <span data-i18n="settings.chatModel">Hlavní AI model (Mozek asistenta)</span>
-          <input type="text" id="setModel" value="" help="Určuje, který jazykový model bude formulovat odpovědi. Aktuálně používáme model optimalizovaný pro podnikovou češtinu.">
+          <input type="text" id="setModel" value="" title="Určuje, který jazykový model bude formulovat odpovědi. Aktuálně používáme model optimalizovaný pro podnikovou češtinu.">
         </label>
         <label class="field" style="flex:1; min-width:180px;">
           <span data-i18n="settings.embModel">Model pro čtení dokumentů (Zamčeno)</span>
-          <input type="text" id="setEmb" value="" disabled="true" help="Tento model převádí firemní PDF a Wordy do matematického formátu. Změna by rozbila celou databázi, proto je toto pole pouze pro čtení.">
+          <input type="text" id="setEmb" value="" disabled="true" title="Tento model převádí firemní PDF a Wordy do matematického formátu. Změna by rozbila celou databázi, proto je toto pole pouze pro čtení.">
         </label>
         <label class="field" style="width:130px;">
           <span data-i18n="settings.temp">Kreativita odpovědí (Teplota)</span>
-          <input type="number" id="setTemp" value="" step="0.1" min="0" max="1" help="Hodnota 0 = AI se striktně drží faktů v dokumentech (doporučeno). Hodnota 1 = AI si začne vymýšlet a být kreativní (zakázáno pro firemní data).">
+          <input type="number" id="setTemp" value="" step="0.1" min="0" max="1" title="Hodnota 0 = AI se striktně drží faktů v dokumentech (doporučeno). Hodnota 1 = AI si začne vymýšlet a být kreativní (zakázáno pro firemní data).">
         </label>
         <label class="field" style="width:130px;">
           <span data-i18n="settings.limit">Množství čteného textu (Kontext)</span>
-          <input type="number" id="setLimit" value="" min="1" max="20" help="Určuje, kolik relevantních odstavců z naší firemní databáze si AI přečte, než začne odpovídat. Ideální hodnota je 4.">
+          <input type="number" id="setLimit" value="" min="1" max="20" title="Určuje, kolik relevantních odstavců z naší firemní databáze si AI přečte, než začne odpovídat. Ideální hodnota je 4.">
         </label>
       </div>
       <div class="row" style="margin-top:6px; gap:20px;">
@@ -535,7 +535,7 @@ const I18N = {
     "settings.h":"Nastavení","settings.lead":"Cesty se dají spravovat zde — bez zásahu IT technika. Ukládá se do databáze, změny se promítnou při dalším skenu.",
     "settings.paths":"Hlídané cesty s dokumenty","settings.col.path":"Cesta","settings.col.sub":"Podadresáře","settings.col.ext":"Přípony","settings.col.state":"Stav","settings.col.on":"Aktivní",
     "settings.add":"+ Přidat cestu","verify.btn":"Ověřit dostupnost cest","verify.start":"Spouštím ověření dostupnosti cest…","verify.done":"Hotovo — STAV cest aktualizován podle serveru.","verify.nobackend":"Backend není připojen — ověření nelze provést na serveru. Následuje jen SIMULACE (výsledky nejsou reálné, STAV zůstává neověřeno).","verify.simdone":"Konec simulace. Reálný stav dodá běžící backend (endpoint /api/verify).","settings.pathHint":"Podporují se síťové cesty (UNC / mount) i podadresáře. Odebrání cesty smaže i její dokumenty z báze.",
-    "settings.model":"Model a hledání","settings.chatModel":"Generativní model","settings.embModel":"Embedding model","settings.temp":"Teplota","settings.limit":"Bloků kontextu",
+    "settings.model":"Model a hledání","settings.chatModel":"Hlavní AI model (Mozek asistenta) ❓","settings.embModel":"Model pro čtení (Zamčeno) ❓","settings.temp":"Kreativita odpovědí (Teplota) ❓","settings.limit":"Množství čteného textu (Kontext) ❓",
     "settings.save":"Uložit nastavení","settings.hdrModel":"Zobrazit model v hlavičce","settings.hdrGithub":"Zobrazit odkaz na GitHub v hlavičce","settings.saveHint":"Runtime nastavení (model, teplota, cesty) se ukládá do SQL. Připojovací údaje zůstávají v .env.",
     "scan.h":"Stav skenování","scan.state":"Stav","scan.idle":"Nečinný","scan.running":"Probíhá skenování…","scan.last":"Poslední sken","scan.next":"Příští sken","scan.now":"Skenovat teď","scan.col.last":"Poslední sken","scan.col.docs":"Dokumentů","scan.col.blocks":"Bloků","scan.col.fresh":"Čerstvost","scan.fresh":"čerstvá","scan.stale":"zastaralá","scan.off":"vypnuto","scan.hint":"Reconciliation sken porovnává soubory se stavem v bázi (mtime/velikost, hash jen u změněných). Frekvence a alert na zastaralost se nastaví v provozu.","state.unverified":"neověřeno","settings.offline":"Dostupnost cest a čerstvost báze nelze v prohlížeči ověřit — dodá je až běžící backend. Zobrazené hodnoty jsou ukázkové.",
     "docs.h":"Dokumentace","docs.lead":"Vše podstatné přehledně přímo v aplikaci.","docs.nav.about":"O aplikaci","docs.nav.how":"Jak to funguje","docs.nav.ask":"Jak se ptát","docs.nav.paths":"Cesty a skenování","docs.nav.security":"Bezpečnost a soukromí",
