@@ -15,10 +15,12 @@ A single Linux server runs:
 | Ollama | 11434 | runs AI models (embedding + generation) |
 | Qdrant | 6333 | vector database |
 | `api.py` (FastAPI) | 8000 | web API + serves UI |
-| `watchdog_service.py` | — | continuous document ingest |
+| `watchdog_service.py` | — | reconciliation ingest (periodic scan of monitored paths) |
 | SQL Server 2019 | 1433 | *(roadmap)* manifest + audit + hybrid search |
 
-Recommended: a server with a **GPU** (for `llama3.1` generation speed), min. 16 GB RAM, enough disk for models (~10 GB) and vectors.
+Recommended: a server with a **GPU** (for `mistral-nemo` generation speed), min. 16 GB RAM, enough disk for models (~10 GB) and vectors.
+
+> **Sign-in is mandatory:** the app sits behind **Microsoft Entra ID (SSO)**. Before deploying you need an Azure App registration and the values `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET` — see step 5. Set the Azure redirect URI to `https://SERVER/api/auth/callback`.
 
 ---
 
@@ -45,11 +47,11 @@ Verify: `curl http://localhost:6333/healthz`.
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull nomic-embed-text     # embedding, 768D — MUST match the Qdrant collection
-ollama pull llama3.1             # answer generation
+ollama pull bge-m3               # embedding, 1024D — MUST match the Qdrant collection
+ollama pull mistral-nemo         # answer generation
 ```
 
-> ⚠️ **Dimensions must match.** `watchdog_service.py` creates the `axima_docs` collection at 768D. `nomic-embed-text` is 768D. If you change the embedding model, change the collection dimension too, or upsert will fail.
+> ⚠️ **Dimensions must match.** `watchdog_service.py` creates the `axima_docs` collection at **1024D**. `bge-m3` is 1024D. If you change the embedding model, change the collection dimension too, or upsert will fail. *(Note: an inline code comment near collection creation still wrongly says "768" — but the actual `size=1024` is correct.)*
 
 ## 4. Code and Python environment
 
@@ -60,11 +62,9 @@ python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Query attachments (screenshot OCR):** the `pip` part is in `requirements.txt` (`python-multipart`, `pytesseract`, `Pillow`). Image OCR additionally needs the **system** package:
-```bash
-sudo apt install -y tesseract-ocr tesseract-ocr-ces
-```
-Without `python-multipart` attachment upload won't work at all; without `tesseract` documents (docx/pdf/xlsx/txt) work but screenshots return a message instead of text (handled, no crash).
+**Query attachments:** the `POST /api/extract` endpoint reads **PDF** (`pypdf`), **DOCX** (`python-docx`) and plain text (UTF-8 fallback). Upload requires `python-multipart` (in `requirements.txt`) — without it attachments don't work at all.
+
+> **Image OCR (screenshots) is NOT implemented yet** — a screenshot without a text layer won't be read. It's a roadmap item ("Parsing"). When added, it will need the system package `tesseract-ocr` + `tesseract-ocr-ces` and Python `pytesseract`/`Pillow`.
 
 ## 5. Configuration (.env)
 
@@ -72,20 +72,27 @@ Without `python-multipart` attachment upload won't work at all; without `tessera
 cp .env.example .env
 nano .env
 ```
-`.env` holds connection credentials and paths. **Never committed.**
-
-## 6. Data folders and network paths
-
-Ingest separates the **upload** and **working** folders (to avoid SMB locks):
-```bash
-mkdir -p /data/llm-demo/watchdog/incoming
-mkdir -p /data/llm-demo/watchdog/docs
+`.env` holds credentials and paths. **Never committed.** Minimum to run:
+```ini
+ENTRA_TENANT_ID=...          # Directory (tenant) ID from the Azure App registration
+ENTRA_CLIENT_ID=...          # Application (client) ID
+ENTRA_CLIENT_SECRET=...      # client secret (the value, not its ID)
+SESSION_SECRET=...           # a strong random string to sign the session cookie
+RECONCILIATION_INTERVAL_SEC=900   # scan interval (prod); dev default 30
+MONITORED_PATHS=/data/...,//herkules/public/smernice   # fallback when the API is down
 ```
 
-### Network paths — IMPORTANT
-If documents live on **network storage (SMB/CIFS/NFS)**, `watchdog` (inotify) **may not fire events** — inotify is unreliable over network mounts. The target model is therefore a **reconciliation scan** (periodic tree walk + diff against DB state), which needs no inotify. Until it ships, use the local `incoming/` folder (which Samba copies into) rather than watching the network path directly. See [HANDOFF.md](HANDOFF.md).
+## 6. Monitored paths and network storage
 
-> **UNC → mount (deployment):** the operator enters paths as `\\server\share\...`, but Linux can't open them directly — the share must be **mounted** (e.g. `\\herkules\public\LumirLiduMil` → `/mnt/herkules/public/LumirLiduMil`). Without a mount, `os.path.isdir` (hence `/api/verify`) always returns "unavailable". On deployment, either mount every watched share or add a **UNC→mount map** in the backend that translates the entered UNC path to the local mount point.
+Ingest is a **reconciliation scan**: `watchdog_service.py` periodically walks the monitored paths, diffs against `reconciliation_manifest.json` (mtime + size) and processes only new/changed files (deleting blocks of files that disappeared). **No `incoming`/`docs` folders are needed** — files are read directly from the path (local) or streamed into `tempfile.TemporaryDirectory` (SMB). Currently only **`.docx` and `.pdf`** are indexed.
+
+Monitored paths are managed by the operator in the UI (Settings) → stored in `monitored_paths.json`, which the scan reads via `GET /api/monitored_paths`. When the API is down, the `MONITORED_PATHS` fallback from `.env` is used.
+
+### Network paths (UNC) — user-space SMB, no OS mount
+The operator enters paths as `\\server\share\...`. The Linux backend accesses them **directly in user space** via the `smbclient` library (over `smbprotocol`) with **Kerberos** authentication (gMSA) — **no `cifs-utils`, no root, no OS mounts**. NetBIOS names are auto-completed to FQDN (domain `axinetwork.loc`), the Kerberos ccache is at `KRB5CCNAME=FILE:/home/aixima/krb5cc_axima`.
+
+- Manual Linux steps (gMSA, keytab with `400`, ticket renewal via a systemd timer): **[LINUX_SETUP_GUIDE.md](LINUX_SETUP_GUIDE.md)**.
+- Architecture rationale (why user-space instead of a mount): **[SPOJENI_FILE_SERVERU.md](SPOJENI_FILE_SERVERU.md)** (Czech).
 
 ## 7. Run
 
@@ -94,7 +101,7 @@ source venv/bin/activate
 python3 watchdog_service.py        # terminal 1 — ingest
 python3 api.py                     # terminal 2 — API + web UI (0.0.0.0:8000)
 ```
-For production, run as **systemd services** (auto-start, restart).
+For production, run as **systemd services** (auto-start, restart). The repo ships a sample unit **`axima-web.service`** for the API + web UI (adjust paths/user for your deployment). The Kerberos ticket for SMB is renewed by a separate timer (see [LINUX_SETUP_GUIDE.md](LINUX_SETUP_GUIDE.md)).
 
 ## 8. Web UI
 
@@ -102,14 +109,14 @@ For production, run as **systemd services** (auto-start, restart).
 ```
 http://SERVER:8000/
 ```
-The UI expects `POST /ask` (working) and `GET /api/version` (working); `GET /api/scope` and `POST /api/settings` are ready to be wired (roadmap).
+The UI is behind sign-in (Entra ID). The endpoints it actually uses: `POST /ask` (SSE), `GET /config`, `GET /api/version`, `GET/POST /api/monitored_paths`, `POST /api/verify`, `POST /api/extract` and `GET /api/auth/*` (login/callback/me/logout).
 
 ## 9. Verify the whole chain (verify-core)
 
-1. Copy a test `.docx` into `incoming/` → watchdog log shows `[SUCCESS] Uloženo N bloků`.
+1. In the UI → **Settings** add a monitored path (a local folder or `\\server\share`) containing a test `.docx`/`.pdf` and save. On the next cycle the `watchdog_service.py` log shows `[SUCCESS] Uloženo N bloků`.
 2. CLI query: `python3 ask_ai.py "question from that document"` → sensible answer with context.
-3. Open `http://SERVER:8000/` → Assistant tab → same query → answer + sources.
-4. Footer shows the **commit hash** and a green health dot.
+3. Open `http://SERVER:8000/` → **sign in (Entra ID)** → Assistant tab → same query → answer + sources.
+4. The header service line shows the **commit hash** and a green health dot.
 
 **Before running production over network paths, verify section 6** — the reconciliation cycle (primarily `LastWriteTime`+size, hashing only changed files) and Linux → SQL19 connectivity.
 

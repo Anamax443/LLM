@@ -72,7 +72,7 @@ Síťové cesty (čtené napřímo přes SMB)
   + ACL dokumentu                                    ┌───────────────────┤
         ▼                                            ▼   filtr dle identity/ACL
      Qdrant  ◄── hybridní hledání (RRF/rerank) ──► Qdrant (dense + sparse vektory)
-  (dense 768D + sparse)                                    │
+  (dense 1024D + sparse)                                   │
                                                            ▼
   SQL Server 2019                                  Ollama (LLM) → odpověď + zdroje
   (manifest, audit s maskováním; živá data BC = fáze 2)
@@ -111,7 +111,7 @@ Soulad s firemním UI standardem, plná kontrola nad výstupy a řízením pří
 **A** manifest syncu, **B** audit (s maskováním PII — viz 5.2), **C** živá data z BC přes text-to-SQL **jako samostatná fáze s vlastním rizikovým profilem** (viz 12), ne odrážka.
 
 ### 4.9 Embedding model a parsing dokumentů (nově doplněno)
-- **Embedding model:** dnešní `nomic-embed-text` je anglicky-centrický → **riziko pro sémantické hledání v češtině**. Volba není obhájena měřením. Před produkcí **benchmarknout multilingvální modely** (`multilingual-e5-large`, `BGE-m3`) na české testovací sadě a rozhodnout podle čísel. (Změna embedding modelu = **re-embedding celého korpusu** — viz provoz 9.4.)
+- **Embedding model:** projekt už přešel z anglicky-centrického `nomic-embed-text` na **multilingvální `bge-m3`** (1024D) — právě kvůli riziku pro češtinu. Volba zatím **není obhájena měřením**; před produkcí ji potvrdit **benchmarkem** (`bge-m3` vs `multilingual-e5-large` na české testovací sadě) a rozhodnout podle čísel. (Změna embedding modelu = **re-embedding celého korpusu** — viz provoz 9.4.)
 - **Parsing:** naivní „čtení → chunk" je pro naše dokumenty nedostatečné. **XLSX** (IP plán) rozsekaný na plochý text ztrácí vazbu řádek/sloupec; **scanned PDF** bez OCR jsou pro systém neviditelné; **tabulky v PDF** se rozpadnou. Nutné **struktura-aware parsing (OCR, tabulky)** — determinuje přesnost víc než volba LLM.
 - **Verzování dokumentů:** dedup podle hashe nechytí *verze* téže směrnice → stará i nová se naindexují a asistent může citovat neplatnou. Nutné evidovat verzi (cesta + hash + časová značka) a preferovat poslední; při konfliktu obsahu to signalizovat.
 
@@ -173,11 +173,11 @@ Data lokálně; právo na výmaz = smazání dokumentu → reconciliation odstra
 
 ## 7. Kapacitní plán (odhad, k ověření měřením)
 
-| Objem | Chunků (~10/dok) | Vektory (768D, ~3 KB) | Poznámka |
+| Objem | Chunků (~10/dok) | Vektory (1024D, ~4 KB) | Poznámka |
 |---|---|---|---|
-| 1 000 dok | ~10 000 | ~30 MB | triviální |
-| 10 000 dok | ~100 000 | ~300 MB | pohodlně v RAM |
-| 100 000 dok | ~1 000 000 | ~3 GB | stále zvládnutelné na jednom serveru |
+| 1 000 dok | ~10 000 | ~40 MB | triviální |
+| 10 000 dok | ~100 000 | ~400 MB | pohodlně v RAM |
+| 100 000 dok | ~1 000 000 | ~4 GB | stále zvládnutelné na jednom serveru |
 
 Vektorová databáze **není** úzké hrdlo. Úzké hrdlo je **generování na GPU** (viz 8, 10). Payload (text bloků) + SQL manifest/audit řádově v jednotkách GB. Doporučení: **Qdrant payload index na `source`** pro efektivní update/mazání ve škále. (Pozn.: při volbě 1024D modelu — e5-large/BGE-m3 — vzroste objem vektorů o ~⅓; stále jednotky GB.)
 
@@ -251,8 +251,8 @@ Hledání informace ~5 min × ~20× týdně × 120 lidí → řádově **tisíce
 | Riziko | Dopad | Pravděp. | Mitigace |
 |---|---|---|---|
 | **Chybějící řízení přístupu (zploštění ACL)** | **Vysoký** | **Vysoká** | **AD/Entra + ACL filtr do MVP (5.1)** |
-| Stale vektory při update | Vysoký | Vysoká | mazání bloků dle zdroje před upsertem — **pre-MVP** |
-| Slabé české embeddingy (nomic) | Vysoký | Střední | benchmark multilingválních modelů (4.9, 8) |
+| Stale vektory při update | Vysoký | Vysoká | ~~mazání bloků dle zdroje před upsertem~~ — **vyřešeno** (reconciliation maže staré bloky i smazané soubory) |
+| Slabé české embeddingy | Vysoký | Střední | přechod na `bge-m3` (multilingvální) hotový; potvrdit benchmarkem (4.9, 8) |
 | Ztráta kontextu tabulek / neviditelná scan PDF | Vysoký | Střední | struktura-aware parsing + OCR (4.9) |
 | Halucinace | Střední | Střední | grounding, citace, „nevím", feedback, rerank |
 | Zastaralá/konfliktní verze směrnice | Střední | Střední | verzování dokumentů (4.9) |

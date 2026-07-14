@@ -12,7 +12,7 @@ The model is **not retrained**. Instead, we continuously make our documents avai
 
 ## Analogy
 
-The language model (`llama3.1`) is like a **smart new colleague**: excellent at the language and at reasoning, but it has **never seen our documents**.
+The language model (`mistral-nemo`) is like a **smart new colleague**: excellent at the language and at reasoning, but it has **never seen our documents**.
 
 - "Teaching it" does **not** mean sending it to a long training course to memorise everything permanently — that is *fine-tuning*: expensive, slow, and quickly outdated.
 - For us, "teaching it" means handing it the **right pages** from our documentation before each answer and saying: *"Answer only from this, and state where you got it."*
@@ -25,7 +25,7 @@ The language model (`llama3.1`) is like a **smart new colleague**: excellent at 
 ### Phase 1: Filling the base (runs automatically in the background)
 
 1. **Folder watching** — the system watches the configured network paths and detects what was added, changed or removed.
-2. **Reading + parsing** — extracts text from DOCX/XLSX/PDF (OCR for scanned PDFs, preserving row/column relations in tables).
+2. **Reading + parsing** — extracts text from DOCX and PDF. *(Planned: OCR for scanned PDFs and better preservation of table row/column relations.)*
 3. **Chunking** — splits each document into smaller overlapping pieces so a specific paragraph can be found, not just the whole file.
 4. **Embedding** — each chunk is turned into a vector (a list of numbers capturing the text's *meaning*). Similar meaning → close vectors.
 5. **Storage** — vector + original text + source reference (+ permissions in future) are stored in the vector database.

@@ -2,15 +2,15 @@
 
 Živý pracovní dokument. **Aktualizuje se po každé změně + commit** (aby se dalo navázat z jiného stroje / mezi lidmi — na projektu se pracuje společně, commituje i kolega `stepancerny1-cyber`).
 
-**Poslední aktualizace:** 2026-07-09 (Integrace Microsoft Entra ID (SSO), vylepšené UX v nastavení, podpora DOCX, oprava RAG blokády u příloh, oprava iterace historie)
+**Poslední aktualizace:** 2026-07-14 (revize dokumentace proti reálnému kódu — sjednoceny modely `bge-m3`/`mistral-nemo`, popsán reconciliation ingest a Entra ID SSO endpointy, opraven přeslib OCR, srovnány `.env.example`/`requirements.txt`/`axima-web.service`, smazán duplicitní `SPOJERNI_FILE_SERVERU.md`)
 
 ---
 
 ## 1. Co je hotové
 
-- **Backend (POC, funkční):** `watchdog_service.py` (ingest), `api.py` (`POST /ask`), `ask_ai.py` (CLI). Stack Ollama (`nomic-embed-text` + `llama3.1`) + Qdrant (`axima_docs`, 1024D). Nově s podporou načítání `.env` souboru, integrací **Microsoft Entra ID (SSO)** pro autentizaci a podpora pro DOCX soubory a dočasné přílohy.
+- **Backend (POC, funkční):** `watchdog_service.py` (reconciliation ingest), `api.py` (`POST /ask` + auth/verify/extract/monitored_paths), `ask_ai.py` (CLI). Stack Ollama (`bge-m3` 1024D embedding + `mistral-nemo` generování) + Qdrant (`axima_docs`, 1024D). Načítání `.env`, integrace **Microsoft Entra ID (SSO)** pro autentizaci, podpora DOCX a dočasných příloh. *(Pozn.: inline komentář ve `watchdog_service.py` u vytvoření kolekce ještě zmiňuje „768 / nomic-embed-text", ale kód vytváří kolekci reálně na 1024D pro `bge-m3` — komentář je zavádějící, k opravě v kódu.)*
 - **Web UI (nové):** `web/index.html` — homepage dle AXIMA UI standardu, **AXIMA logo v hlavičce**, 4 záložky, dark+light, tisk light (**logo v hlavičce tisku**), CS+EN, servisní řádek **v hlavičce** (health + model + commit + hodiny + GitHub). **Nově:** **streamovaný chat** s historií konverzace a podporou Markdownu, tlačítko "Zastavit" generování. Nastavení má **Stav skenování** (poslední/příští sken, „Skenovat teď", per-cesta dokumenty/bloky/čerstvost). Dokumentace = **plnohodnotné firemní články uvnitř aplikace** (boční menu, CS+EN, bez odkazů na git/soubory). Nyní **komunikuje s backendem** pro načítání a ukládání monitorovaných cest. Nově spouštěno jako `axima-web.service` přes systemd. **UX vylepšení:** Přepracované popisky konfigurace a nápovědy pro laiky (ikony otazníku s hover textem), opraven layout formuláře "Model a hledání" pro symetrii a zarovnání tooltipů, opravená lokalizace (i18n) klíčů (odebrány emoji) a nahrazen nestandardní atribut `help` za `title`.
-- **Přílohy k dotazu (nové):** v Asistentu tlačítko 📎 + **vkládání ze schránky (Ctrl+V screenshot)** + náhled příloh; obsah se přes `POST /api/extract` převede na text (docx/xlsx/pdf/txt/ps1/bat/cmd/ini/conf/json/xml/html/htm parsery + **OCR** obrázků přes pytesseract, graceful fallback) a přidá ke kontextu. Deploy: `pip` (python-multipart, pytesseract, Pillow, python-docx, pypdf) + systémový `tesseract-ocr` + `tesseract-ocr-ces`. Opravena striktní RAG blokáda u doplňujících otázek k dříve nahraným přílohám.
+- **Přílohy k dotazu (nové):** v Asistentu tlačítko 📎 + **vkládání ze schránky (Ctrl+V screenshot)** + náhled příloh; obsah se přes `POST /api/extract` převede na text a přidá ke kontextu. **Reálně implementované parsery:** PDF (`pypdf`), DOCX (`python-docx`), textový fallback (UTF-8). **OCR obrázků (pytesseract) NENÍ v současném `/api/extract` — screenshot bez textové vrstvy se nepřečte; je to roadmapa (krok „Parsing").** Deploy pro upload: `pip install python-multipart`. Opravena striktní RAG blokáda u doplňujících otázek k dříve nahraným přílohám.
 - **Ověření cest (nové):** tlačítko „Ověřit dostupnost cest" + **terminál**; `POST /api/verify` na serveru provádí ověření UNC cest přímo v uživatelském prostoru (User Space) přes knihovnu `smbclient` s Kerberos autentizací (automatické doplňování FQDN, explicitní ccache `FILE:/home/aixima/krb5cc_axima`). Bez nutnosti montování na úrovni OS a bez práv root. **STAV je do ověření „neověřeno"** — nefabrikuje se. Manuální kroky pro nastavení Linuxu (Kerberos keytab gMSA s právy `400`) jsou v **[docs/LINUX_SETUP_GUIDE.md](LINUX_SETUP_GUIDE.md)**.
 - **Hlavička (nové):** servisní řádek přesunut z patičky **do hlavičky** (health + model 🧠 + commit + hodiny + **GitHub ikona**); model/GitHub volitelně skryjete v Nastavení (localStorage). Změněn i AXIMA UI standard (repo Anamax443/axima-ui-standard).
 - **`api.py` doplněno:** `GET /api/version` (kontrakt `{commit,branch,builtAt,startedAt}`), `POST /api/verify`, `POST /api/extract` + servírování `web/`. `/ask` streamuje (SSE). **Nově:** `GET /api/monitored_paths` a `POST /api/set_monitored_paths` pro správu cest z WebUI, **vylepšené logování chyb** a **health checky pro Qdrant a Ollama** při startu API, **opravené CORS** pro WebUI. Opravena syntaktická chyba při iteraci historie.
@@ -40,10 +40,16 @@
 
 ## 3. Známé bugy / dluhy (v současném kódu)
 
-- **Duplikovaná konfigurace** (URL, model, cesty) natvrdo ve 3 souborech → sjednotit do `config`/`.env`.
+- **Duplikovaná konfigurace** (URL, model, cesty) natvrdo ve 3 souborech → sjednotit do `config`/`.env`. Konstanty v kódu (`bge-m3`, `mistral-nemo`, limit 4, threshold 0.50) nečtou hodnoty z `.env` — `.env.example` je proto orientační.
 - **`api.py` poslouchá na `0.0.0.0`** — vědomě (aby web UI bylo dostupné z klientů); zvážit reverzní proxy/omezení.
 - **Chybí payload index** v Qdrantu na `source` → mazání/update podle dokumentu je full-scan (pomalé ve škále).
 - **Potřeba restartu API** po změnách v `monitored_paths.json` (není automatické).
+- **Zavádějící inline komentář** ve `watchdog_service.py` (vytvoření kolekce): text říká „768 / nomic-embed-text", kód ale vytváří kolekci na **1024D** pro `bge-m3`. Jen komentář, funkčně OK — k opravě.
+- **Mrtvý kód v `/ask`:** seznam `messages` se sestavuje dvakrát po sobě (první se zahodí) — neškodí, ale patří pryč.
+- **OCR přeslíbeno, neimplementováno:** UI/starší docs zmiňovaly OCR příloh; `/api/extract` OCR nedělá (jen PDF/DOCX/text). Sjednoceno v roadmapě (krok „Parsing").
+- **Identita zdroje = `display_name`:** u lokálních cest je to plná cesta (OK), u SMB plná UNC/FQDN cesta (OK) — dřívější kolize „jen název souboru" je vyřešena; zbývá jen Qdrant payload index.
+
+**Opraveno oproti starším poznámkám (už NENÍ bug):** stale vektory při update (reconciliation maže staré bloky zdroje před upsertem), `on_deleted` (bloky smazaných souborů se odstraní), normalizace lomítek (falešná detekce smazání), CORS pre-flight, iterace historie v `/ask`.
 
 ## 4. Další kroky (reprioritizováno po oponentuře)
 

@@ -12,7 +12,7 @@ Model se **nepřetrénovává**. Místo toho mu naše dokumenty průběžně dá
 
 ## Přirovnání
 
-Jazykový model (`llama3.1`) je jako **chytrý nový kolega**: skvěle umí česky a umí uvažovat, ale **naše dokumenty nikdy neviděl**.
+Jazykový model (`mistral-nemo`) je jako **chytrý nový kolega**: skvěle umí česky a umí uvažovat, ale **naše dokumenty nikdy neviděl**.
 
 - „Naučit ho" **neznamená** poslat ho na dlouhé školení, aby si všechno zapamatoval natrvalo — to je *fine-tuning*: drahé, pomalé a rychle zastará.
 - „Naučit ho" u nás **znamená** dát mu před každou odpovědí **nalistované správné stránky** z naší dokumentace a říct: *„Odpověz jen z tohohle a napiš, odkud to máš."*
@@ -27,7 +27,7 @@ Jazykový model (`llama3.1`) je jako **chytrý nový kolega**: skvěle umí čes
 Tohle je jádro „učení na datech":
 
 1. **Sledování složek** — systém hlídá určené síťové cesty a pozná, co přibylo, změnilo se nebo zmizelo.
-2. **Přečtení + parsing** — z DOCX/XLSX/PDF vytáhne text (u naskenovaných PDF přes OCR, u tabulek zachová vazbu řádek/sloupec).
+2. **Přečtení + parsing** — z DOCX a PDF vytáhne text. *(Rozšíření: naskenované PDF přes OCR a lepší zachování tabulek řádek/sloupec jsou v plánu.)*
 3. **Rozsekání na bloky** — dokument rozdělí na menší překrývající se úseky, aby se dal najít i konkrétní odstavec, ne jen celý soubor.
 4. **Převod na „význam" (embedding)** — každý blok se převede na vektor (seznam čísel zachycující *význam* textu). Podobný význam → blízké vektory.
 5. **Uložení** — vektor + původní text + odkaz na zdroj (+ do budoucna oprávnění) se uloží do vektorové databáze.

@@ -5,28 +5,36 @@
 fastapi
 uvicorn[standard]
 pydantic
+python-multipart          # upload příloh (FastAPI UploadFile) — bez něj /api/extract nefunguje
+
+# --- Přihlášení: Microsoft Entra ID (SSO) ---
+authlib                   # OAuth/OIDC klient (api.py)
+itsdangerous              # podpis session cookie (Starlette SessionMiddleware)
+python-dotenv             # načtení .env (load_dotenv)
 
 # --- HTTP klient (Ollama) ---
 requests
 
 # --- Vektorová databáze ---
-qdrant-client>=1.11
+qdrant-client>=1.11       # nutné query_points (starší search odstraněn)
 
-# --- Sledování souborů / ingest ---
-watchdog
-
-# --- Čtení dokumentů ---
-python-docx
-openpyxl
-pdfplumber
+# --- Čtení dokumentů (ingest + přílohy) ---
+python-docx               # DOCX (ingest i /api/extract)
+pypdf                     # PDF v /api/extract
+pdfplumber                # PDF v ingestu
+openpyxl                  # XLSX v extract_text (ingest)
 
 # --- Chunkování textu ---
 langchain-text-splitters
 
-# --- Přílohy: OCR screenshotů (vyžaduje systémový balík "tesseract-ocr" + "tesseract-ocr-ces") ---
-pytesseract
-Pillow
-python-multipart   # nutné pro upload příloh (FastAPI UploadFile)
+# --- User-Space SMB (síťové cesty přes Kerberos/gMSA) ---
+smbprotocol               # poskytuje modul "smbclient"
+gssapi                    # Kerberos "negotiate" autentizace na Linuxu
+
+# --- Roadmapa / zatím nepoužito v kódu ---
+# pytesseract             # OCR příloh — /api/extract dnes OCR NEDĚLÁ (viz HANDOFF)
+# Pillow                  # OCR obrázků (spolu s pytesseract)
+# watchdog                # inotify watcher — ingest dnes běží jako reconciliation sken, ne watchdog
 
 # --- SQL Server 2019 (roadmapa: manifest, audit, hybridní hledání) ---
-# pyodbc            # vyžaduje systémový "ODBC Driver 18 for SQL Server"
+# pyodbc                  # vyžaduje systémový "ODBC Driver 18 for SQL Server"

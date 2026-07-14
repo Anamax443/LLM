@@ -1,12 +1,19 @@
 [Unit]
-Description=AXIMA AI Web UI (Streamlit)
-After=network.target axima-api.service
+# AXIMA Znalostní Asistent — FastAPI backend (api.py), který ZÁROVEŇ servíruje web UI (web/index.html).
+# Pozn.: NEjde o Streamlit — UI je statické HTML servírované přímo FastAPI (viz rozhodnutí #1 v docs/HANDOFF.md).
+Description=AXIMA Znalostni Asistent (FastAPI API + web UI)
+After=network.target
+# Volitelně po Qdrant/Ollama, pokud běží jako služby:
+# After=network.target qdrant.service ollama.service
 
 [Service]
 User=aixima
 WorkingDirectory=/data/llm-demo/watchdog
+EnvironmentFile=/data/llm-demo/watchdog/.env
 Environment="PATH=/data/llm-demo/watchdog/venv/bin"
-ExecStart=/data/llm-demo/watchdog/venv/bin/streamlit run /data/llm-demo/watchdog/web_ui.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+# Kerberos ccache pro user-space SMB (obnovu lístku řeší rag-kinit.timer — viz docs/LINUX_SETUP_GUIDE.md)
+Environment="KRB5CCNAME=FILE:/home/aixima/krb5cc_axima"
+ExecStart=/data/llm-demo/watchdog/venv/bin/uvicorn api:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=3
 

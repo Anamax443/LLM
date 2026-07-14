@@ -2,6 +2,8 @@
 
 Tento dokument detailně navrhuje řešení pro **dynamické a bezpečné připojování a čtení** síťových složek z Windows File Serveru do Linuxové aplikační aplikace (RAG asistent) nativně v uživatelském prostoru (User Space) bez nutnosti montování na úrovni operačního systému.
 
+> **Stav vs návrh:** user-space SMB přes `smbclient`/Kerberos, stahování do `tempfile.TemporaryDirectory` a reconciliation sken jsou **implementované**. **SQL Server jako úložiště konfigurace cest a hash ACL v reconciliation jsou zatím roadmapa** — dnes se hlídané cesty ukládají do `monitored_paths.json` (endpoint `POST /api/set_monitored_paths`) a sken porovnává jen mtime + velikost.
+
 ---
 
 ## 1. Architektura a tok dat
@@ -11,7 +13,7 @@ Tento dokument detailně navrhuje řešení pro **dynamické a bezpečné připo
  │                      Webový prohlížeč (Administrátor)                 │
  └──────────────────────────────────┬─────────────────────────────────────┘
                                     │ 
-                                    │ POST /api/settings  (přidání \\server\share\cesta)
+                                    │ POST /api/set_monitored_paths  (přidání \\server\share\cesta)
                                     ▼
  ┌────────────────────────────────────────────────────────────────────────┐
  │                        FastAPI Backend (api.py)                        │

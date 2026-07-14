@@ -2,6 +2,12 @@
 
 Tento dokument popisuje kroky, které je nutné provést na cílovém Linuxovém serveru, aby bylo možné bezpečně přistupovat k síťovým složkám z Windows File Serveru přímo v Python aplikaci (User Space) s využitím Group Managed Service Account (gMSA) a Kerberos ověřování.
 
+> **Naše prostředí (AXIMA) — konkrétní hodnoty pro placeholdery níže:**
+> - Kerberos realm: **`AXINETWORK.LOC`** (doména `axinetwork.loc`; kód automaticky doplňuje FQDN k NetBIOS jménům hostitelů)
+> - Spouštěcí uživatel aplikace: **`aixima`** (v obecném návodu značen `rag-user`)
+> - Kerberos ccache: **`FILE:/home/aixima/krb5cc_axima`** (kód nastavuje přes `KRB5CCNAME`)
+> - Systemd služba API+web: **`axima-web.service`** (v obecném návodu značena `axima-rag-api.service`)
+
 ---
 
 ## 1. Příprava gMSA účtu v Active Directory
@@ -149,5 +155,5 @@ sudo systemctl enable --now rag-kinit.timer
 Po dokončení konfigurace restartujte službu RAG asistenta, aby začala využívat novou pipeline bez OS závislostí:
 
 ```bash
-sudo systemctl restart axima-rag-api.service
+sudo systemctl restart axima-web.service
 ```
