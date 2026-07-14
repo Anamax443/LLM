@@ -254,15 +254,7 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
             if req.history:
                 for msg in req.history:
                     messages.append({"role": msg.role, "content": msg.content})
-            
-            messages.append({"role": "system", "content": SYSTEM_PROMPT})
-            messages.append({"role": "user", "content": f"KONTEXT:\n{context}\n\nOTÁZKA: {question_text}"})
 
-            messages = []
-            if req.history:
-                for msg in req.history:
-                    messages.append({"role": msg.role, "content": msg.content})
-            
             messages.append({"role": "system", "content": SYSTEM_PROMPT})
             messages.append({"role": "user", "content": f"KONTEXT:\n{context}\n\nOTÁZKA: {question_text}"})
 

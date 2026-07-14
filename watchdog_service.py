@@ -19,7 +19,7 @@ MANIFEST_FILE = "reconciliation_manifest.json"
 
 qdrant = QdrantClient(QDRANT_URL)
 
-# Vytvoření kolekce s dimenzí 768 (odpovídá nomic-embed-text)
+# Vytvoření kolekce s dimenzí 1024 (odpovídá bge-m3)
 if not qdrant.collection_exists(COLLECTION_NAME):
     qdrant.create_collection(
         collection_name=COLLECTION_NAME,
