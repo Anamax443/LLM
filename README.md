@@ -93,7 +93,7 @@ python3 api.py                  # ve druhém → http://SERVER:8000
 
 `web/index.html` servíruje `api.py` na `/` (samostatný soubor, bez frameworku, **AXIMA logo** v hlavičce). Po přihlášení (Entra ID SSO) záložky:
 
-- **Asistent** — **streamovaný chat** s historií a Markdownem (`POST /ask`); k dotazu lze **přiložit soubory nebo vložit screenshot (Ctrl+V)** — obsah se převede na text (`POST /api/extract`: PDF/DOCX/text) a přidá ke kontextu. Generování lze **zastavit**; při nedostupném backendu ukázkový režim s obecnou chybovou hláškou.
+- **Asistent** — **streamovaný chat** s historií a Markdownem (`POST /ask`); k dotazu lze **přiložit soubory nebo vložit screenshot (Ctrl+V)** — obsah se převede na text (`POST /api/extract`: PDF/DOCX/text + **OCR obrázků/screenshotů** přes `pytesseract`, čeština+angličtina) a přidá ke kontextu. Generování lze **zastavit**; při nedostupném backendu ukázkový režim s obecnou chybovou hláškou.
 - **Nastavení** — správa **hlídaných cest** (přidat/odebrat, podadresáře, přípony, aktivní) **načítané z backendu** (`GET /api/monitored_paths`) a **ukládané na backend** (`POST /api/set_monitored_paths`), tlačítko **Ověřit dostupnost cest** + **terminál** (reálný check `POST /api/verify` přes user-space SMB; do ověření je STAV „neověřeno", nefabrikuje se), **Stav skenování**, model/teplota/počet bloků a přepínače „zobrazit v hlavičce". *Cesty spravuje operátor bez zásahu IT.*
 - **Dokumentace** — plnohodnotná dokumentace **uvnitř aplikace** (boční menu + články: O aplikaci, Jak to funguje, Jak se ptát, Cesty a skenování, Bezpečnost) ve firemním designu, **bez odkazů na git či soubory**.
 - **Manažerský výstup** — netechnický přehled + **tisknutelný přehled rozsahu** báze (s **AXIMA logem** v hlavičce tisku). Tisk je vždy ve světlém režimu.
@@ -105,7 +105,7 @@ python3 api.py                  # ve druhém → http://SERVER:8000
 2. **Řízení přístupu (MVP, podmínka nasazení)** — Entra ID autentizace **je hotová**; zbývá indexace ACL u dokumentu a filtr výsledků dle identity uživatele. Bez toho RAG zplošťuje NTFS oprávnění = bezpečnostní regrese. **Čerstvost ACL:** sken sleduje i security-descriptor (změna práv nemění mtime), autorizace dle tranzitivního členství uživatele.
 3. **Verzování dokumentů** — identita = plná relativní cesta, Qdrant payload index na `source`.
 4. **Testovací sada + benchmark modelů** — embedding (`bge-m3` vs multilingual-e5, kvůli češtině) i generativních (vč. kvantizace).
-5. **Parsing** — **OCR** (dnes `/api/extract` OCR nedělá) a struktura-aware zpracování tabulek (XLSX/PDF).
+5. **Parsing** — OCR **obrázkových příloh hotovo**; zbývá OCR **skenovaných PDF** a struktura-aware zpracování tabulek (XLSX/PDF).
 6. **Hybridní hledání** — Qdrant **dense + sparse** vektory + RRF/rerank (kvůli rychlosti nativně v Qdrantu, ne SQL FTS).
 7. **Rychlost** — streaming odpovědí (hotovo), volba modelu/GPU.
 8. **Provoz** — monitoring, DR, systemd, audit s maskováním PII, feedback smyčka.

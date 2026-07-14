@@ -387,6 +387,38 @@ def set_monitored_paths_endpoint(paths: list[str]):
     return {"status": "ok", "message": f"Uloženo {len(paths)} monitorovaných cest."}
 
 
+# --- OCR příloh (obrázky / screenshoty) ---
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp")
+
+def _ocr_image(content: bytes) -> str:
+    """OCR textu z obrázku (čeština + angličtina). Lazy import — když na serveru
+    chybí Python balíky (pytesseract/Pillow) nebo systémový tesseract, vrátí
+    srozumitelnou hlášku a NEspadne (aby dotaz mohl pokračovat aspoň bez přílohy)."""
+    try:
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        return "[OCR není k dispozici: na serveru chybí Python balíky pytesseract/Pillow.]"
+    try:
+        img = Image.open(io.BytesIO(content))
+    except Exception as e:
+        return f"[Nelze otevřít obrázek pro OCR: {e}]"
+    try:
+        text = pytesseract.image_to_string(img, lang="ces+eng")
+    except pytesseract.TesseractNotFoundError:
+        return "[OCR není k dispozici: na serveru není nainstalován balík 'tesseract-ocr'.]"
+    except pytesseract.TesseractError:
+        # Jazyková data 'ces' nemusí být nainstalovaná (balík tesseract-ocr-ces) → zkusíme aspoň angličtinu.
+        try:
+            text = pytesseract.image_to_string(img, lang="eng")
+        except Exception as e:
+            return f"[Chyba OCR (chybí jazyková data tesseractu?): {e}]"
+    except Exception as e:
+        return f"[Chyba OCR obrázku: {e}]"
+    text = (text or "").strip()
+    return text if text else "[OCR v obrázku nenašel žádný čitelný text.]"
+
+
 @app.post("/api/extract")
 async def extract_files(request: Request, files: list[UploadFile] = File(...)):
     # Bezpečnostní kontrola - pouze přihlášení uživatelé
@@ -397,8 +429,12 @@ async def extract_files(request: Request, files: list[UploadFile] = File(...)):
     for file in files:
         content = await file.read()
         text = ""
-        
-        if file.filename.lower().endswith(".pdf"):
+
+        fname = (file.filename or "").lower()
+        # Screenshot ze schránky přijde bez přípony, ale s content_type image/*.
+        is_image = fname.endswith(IMAGE_EXTS) or (file.content_type or "").startswith("image/")
+
+        if fname.endswith(".pdf"):
             try:
                 pdf = PdfReader(io.BytesIO(content))
                 for page in pdf.pages:
@@ -407,12 +443,17 @@ async def extract_files(request: Request, files: list[UploadFile] = File(...)):
                         text += page_text + "\n"
             except Exception as e:
                 text = f"Chyba při čtení PDF: {str(e)}"
-        elif file.filename.lower().endswith(".docx"):
+            if not text.strip():
+                text = "[PDF neobsahuje textovou vrstvu (pravděpodobně sken). OCR skenovaných PDF zatím není podporováno — vložte stránku jako obrázek.]"
+        elif fname.endswith(".docx"):
             try:
                 doc = Document(io.BytesIO(content))
                 text = "\n".join([para.text for para in doc.paragraphs])
             except Exception as e:
                 text = f"Chyba při čtení DOCX: {str(e)}"
+        elif is_image:
+            # Obrázek / screenshot → OCR (čeština + angličtina)
+            text = _ocr_image(content)
         else:
             # Fallback pro běžné textové soubory (txt, csv, md)
             try:

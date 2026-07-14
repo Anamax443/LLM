@@ -63,9 +63,13 @@ python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Přílohy k dotazu:** endpoint `POST /api/extract` čte **PDF** (`pypdf`), **DOCX** (`python-docx`) a prostý text (UTF-8 fallback). Upload vyžaduje `python-multipart` (je v `requirements.txt`) — bez něj přílohy nefungují vůbec.
+**Přílohy k dotazu:** endpoint `POST /api/extract` čte **PDF** (`pypdf`), **DOCX** (`python-docx`), **obrázky/screenshoty přes OCR** (`pytesseract`, jazyky `ces+eng`) a prostý text (UTF-8 fallback). Upload vyžaduje `python-multipart` (v `requirements.txt`) — bez něj přílohy nefungují vůbec.
 
-> **OCR obrázků (screenshotů) zatím NENÍ implementováno** — screenshot bez textové vrstvy se nepřečte. Je to položka roadmapy (krok „Parsing"). Až se přidá, doplní se systémový balík `tesseract-ocr` + `tesseract-ocr-ces` a Python `pytesseract`/`Pillow`.
+Pro OCR obrázků je navíc nutný **systémový** balík tesseractu (Python `pytesseract`/`Pillow` jsou v `requirements.txt`):
+```bash
+sudo apt install -y tesseract-ocr tesseract-ocr-ces
+```
+Bez tesseractu / jazykových dat OCR **nespadne** — u obrázku vrátí srozumitelnou hlášku a dotaz pokračuje. **OCR skenovaných PDF zatím není** (položka roadmapy „Parsing").
 
 ## 5. Konfigurace (.env)
 

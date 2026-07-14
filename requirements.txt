@@ -27,13 +27,17 @@ openpyxl                  # XLSX v extract_text (ingest)
 # --- Chunkování textu ---
 langchain-text-splitters
 
+# --- OCR obrázkových příloh (/api/extract) ---
+# Vyžaduje systémový balík "tesseract-ocr" + "tesseract-ocr-ces" (viz docs/BUILD.md).
+# Když chybí, /api/extract u obrázků vrátí hlášku a nespadne.
+pytesseract
+Pillow
+
 # --- User-Space SMB (síťové cesty přes Kerberos/gMSA) ---
 smbprotocol               # poskytuje modul "smbclient"
 gssapi                    # Kerberos "negotiate" autentizace na Linuxu
 
 # --- Roadmapa / zatím nepoužito v kódu ---
-# pytesseract             # OCR příloh — /api/extract dnes OCR NEDĚLÁ (viz HANDOFF)
-# Pillow                  # OCR obrázků (spolu s pytesseract)
 # watchdog                # inotify watcher — ingest dnes běží jako reconciliation sken, ne watchdog
 
 # --- SQL Server 2019 (roadmapa: manifest, audit, hybridní hledání) ---

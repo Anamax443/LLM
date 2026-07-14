@@ -93,7 +93,7 @@ python3 api.py                  # terminal 2 → http://SERVER:8000
 
 `web/index.html` is served by `api.py` at `/` (single file, no framework, **AXIMA logo** in the header). After sign-in (Entra ID SSO) the tabs are:
 
-- **Assistant** — **streamed chat** with history and Markdown (`POST /ask`); you can **attach files or paste a screenshot (Ctrl+V)** — the content is turned into text (`POST /api/extract`: PDF/DOCX/text) and added to the context. Generation can be **stopped**; if the backend is unavailable, a sample mode with a generic error message is shown.
+- **Assistant** — **streamed chat** with history and Markdown (`POST /ask`); you can **attach files or paste a screenshot (Ctrl+V)** — the content is turned into text (`POST /api/extract`: PDF/DOCX/text + **image/screenshot OCR** via `pytesseract`, Czech+English) and added to the context. Generation can be **stopped**; if the backend is unavailable, a sample mode with a generic error message is shown.
 - **Settings** — manage **monitored paths** (add/remove, subfolders, extensions, active) **loaded from the backend** (`GET /api/monitored_paths`) and **saved to the backend** (`POST /api/set_monitored_paths`), a **Verify path availability** button + **terminal** (real check `POST /api/verify` via user-space SMB; until verified the status is "unverified", never fabricated), **Scan status**, model/temperature/block count and "show in header" toggles. *Paths are managed by the operator with no IT involvement.*
 - **Documentation** — full documentation **inside the app** (side menu + articles: About, How it works, How to ask, Paths and scanning, Security) in the corporate design, **with no links to git or files**.
 - **Management report** — a non-technical overview + a **printable knowledge-base scope** (with the **AXIMA logo** in the print header). Print is always in light mode.
@@ -105,7 +105,7 @@ python3 api.py                  # terminal 2 → http://SERVER:8000
 2. **Access control (MVP, deployment prerequisite)** — Entra ID authentication **is done**; still missing per-document ACL indexing and filtering results by the user's identity. Without it, RAG flattens NTFS permissions = a security regression. **ACL freshness:** the scan also tracks the security descriptor (a permission change doesn't alter mtime), with authorization by the user's transitive group membership.
 3. **Document versioning** — identity = full relative path, Qdrant payload index on `source`.
 4. **Test set + model benchmark** — embedding (`bge-m3` vs multilingual-e5, for Czech) and generative (incl. quantisation).
-5. **Parsing** — **OCR** (today `/api/extract` does not do OCR) and structure-aware table handling (XLSX/PDF).
+5. **Parsing** — image-attachment OCR **done**; still to do: OCR for **scanned PDFs** and structure-aware table handling (XLSX/PDF).
 6. **Hybrid search** — Qdrant **dense + sparse** vectors + RRF/rerank (native in Qdrant for speed, not SQL FTS).
 7. **Speed** — answer streaming (done), model/GPU choice.
 8. **Operations** — monitoring, DR, systemd, audit with PII masking, feedback loop.

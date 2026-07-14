@@ -62,9 +62,13 @@ python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Query attachments:** the `POST /api/extract` endpoint reads **PDF** (`pypdf`), **DOCX** (`python-docx`) and plain text (UTF-8 fallback). Upload requires `python-multipart` (in `requirements.txt`) — without it attachments don't work at all.
+**Query attachments:** the `POST /api/extract` endpoint reads **PDF** (`pypdf`), **DOCX** (`python-docx`), **images/screenshots via OCR** (`pytesseract`, languages `ces+eng`) and plain text (UTF-8 fallback). Upload requires `python-multipart` (in `requirements.txt`) — without it attachments don't work at all.
 
-> **Image OCR (screenshots) is NOT implemented yet** — a screenshot without a text layer won't be read. It's a roadmap item ("Parsing"). When added, it will need the system package `tesseract-ocr` + `tesseract-ocr-ces` and Python `pytesseract`/`Pillow`.
+Image OCR additionally needs the **system** tesseract package (Python `pytesseract`/`Pillow` are in `requirements.txt`):
+```bash
+sudo apt install -y tesseract-ocr tesseract-ocr-ces
+```
+Without tesseract / language data OCR **won't crash** — it returns a clear message for the image and the query continues. **OCR for scanned PDFs is not implemented yet** (roadmap item "Parsing").
 
 ## 5. Configuration (.env)
 
