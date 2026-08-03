@@ -363,7 +363,7 @@ def verify_paths(req: VerifyRequest):
                 try:
                     import subprocess
                     subprocess.run(
-                        ["kinit", "aixima@AXINETWORK.LOC"], 
+                        ["kinit", "aixima"], 
                         input=b"aixima2026\n",
                         capture_output=True, 
                         check=True
@@ -437,7 +437,7 @@ def scan_public_folders(request: Request):
         try:
             import subprocess
             subprocess.run(
-                ["kinit", "aixima@AXINETWORK.LOC"], 
+                ["kinit", "aixima"], 
                 input=b"aixima2026\n",
                 capture_output=True, 
                 check=True

@@ -120,7 +120,7 @@ def init_smb_session(unc_path):
             try:
                 import subprocess
                 subprocess.run(
-                    ["kinit", "aixima@AXINETWORK.LOC"], 
+                    ["kinit", "aixima"], 
                     input=b"aixima2026\n",
                     capture_output=True, 
                     check=True
@@ -330,7 +330,7 @@ def _scan_smb_path(path, acl, collection_name, manifest, new_manifest):
         try:
             import subprocess
             subprocess.run(
-                ["kinit", "aixima@AXINETWORK.LOC"], 
+                ["kinit", "aixima"], 
                 input=b"aixima2026\n",
                 capture_output=True, 
                 check=True
