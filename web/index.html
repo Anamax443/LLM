@@ -745,7 +745,7 @@ function renderPaths(){
         const data = await response.json();
         let added = 0;
         data.folders.forEach(f => {
-            const p = "\\\\\\\\herkules\\\\public\\\\" + f.folder;
+            const p = "\\\\herkules\\public\\" + f.folder;
             if (!paths.some(existing => existing.path.toLowerCase() === p.toLowerCase())) {
                 paths.push({ 
                     path: p, sub:true, ext:"docx,pdf,xlsx", ok:true, on:true, 
