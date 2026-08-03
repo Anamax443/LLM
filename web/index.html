@@ -730,7 +730,14 @@ function renderPaths(){
     btn.innerText = "Načítám...";
     try {
         const response = await fetch(`${API_BASE}/scan_public_folders`);
-        if (!response.ok) throw new Error("Nelze načíst ze serveru");
+        if (!response.ok) {
+            let errorDetail = "Nelze načíst ze serveru";
+            try {
+                const errData = await response.json();
+                if (errData.detail) errorDetail = errData.detail;
+            } catch(e) {}
+            throw new Error(errorDetail);
+        }
         const data = await response.json();
         let added = 0;
         data.folders.forEach(f => {
