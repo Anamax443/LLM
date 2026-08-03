@@ -359,18 +359,6 @@ def verify_paths(req: VerifyRequest):
 
                 os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima" # Nastavení ccache přes proměnnou prostředí
                 
-                # Automatická obnova Kerberos lístku před SMB relací
-                try:
-                    import subprocess
-                    subprocess.run(
-                        ["kinit", "aixima"], 
-                        input=b"aixima2026\n",
-                        capture_output=True, 
-                        check=True
-                    )
-                except Exception as e:
-                    print(f"[WARN] Nepodařilo se obnovit Kerberos lístek: {e}")
-
                 smbclient.register_session(host_fqdn, auth_protocol="negotiate")
                 
                 # Musíš použít novou cestu p_fqdn!
@@ -432,24 +420,6 @@ def scan_public_folders(request: Request):
         p_fqdn = base_unc.replace(host_netbios, host_fqdn, 1)
 
         os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
-        
-        # Automatická obnova Kerberos lístku před SMB relací
-        try:
-            import subprocess
-            subprocess.run(
-                ["kinit", "aixima"], 
-                input=b"aixima2026\n",
-                capture_output=True, 
-                check=True
-            )
-        except subprocess.CalledProcessError as e:
-            err_msg = e.stderr.decode('utf-8', errors='replace')
-            print(f"[WARN] Nepodařilo se obnovit Kerberos lístek: {err_msg}")
-            raise HTTPException(status_code=500, detail=f"Kinit selhal: {err_msg}")
-        except Exception as e:
-            print(f"[WARN] Nepodařilo se spustit kinit: {e}")
-            raise HTTPException(status_code=500, detail=f"Nelze spustit kinit: {e}")
-
         smbclient.register_session(host_fqdn, auth_protocol="negotiate")
         
         folders = []

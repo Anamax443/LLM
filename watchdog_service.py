@@ -115,19 +115,6 @@ def init_smb_session(unc_path):
         host_fqdn = _get_fqdn_host(host_netbios)
         try:
             os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
-            
-            # Automatická obnova Kerberos lístku před SMB relací
-            try:
-                import subprocess
-                subprocess.run(
-                    ["kinit", "aixima"], 
-                    input=b"aixima2026\n",
-                    capture_output=True, 
-                    check=True
-                )
-            except Exception as e:
-                print(f"[WARN] Nepodařilo se obnovit Kerberos lístek: {e}")
-
             smbclient.register_session(host_fqdn, auth_protocol="negotiate")
             return True
         except Exception as e:
@@ -325,19 +312,6 @@ def _scan_smb_path(path, acl, collection_name, manifest, new_manifest):
 
         # 3. Registrace session
         os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
-        
-        # Automatická obnova Kerberos lístku před SMB relací
-        try:
-            import subprocess
-            subprocess.run(
-                ["kinit", "aixima"], 
-                input=b"aixima2026\n",
-                capture_output=True, 
-                check=True
-            )
-        except Exception as e:
-            print(f"[WARN] Nepodařilo se obnovit Kerberos lístek: {e}")
-
         smbclient.register_session(host_fqdn, auth_protocol="negotiate")
         print(f"[DEBUG] SMB session registrována pro {host_fqdn}")
         
