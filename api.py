@@ -116,7 +116,7 @@ def _git(*args):
 QDRANT_URL = "http://localhost:6333"
 OLLAMA_URL = "http://localhost:11434/api"
 COLLECTION_NAME = "axima_docs"
-CHAT_MODEL = "llama3.1"
+CHAT_MODEL = "qwen2.5:14b"
 
 # Pravidla chování asistenta.
 SYSTEM_PROMPT = """Odpovídej VŽDY a VÝHRADNĚ v českém jazyce. Jsi znalostní a konverzační asistent firmy AXIMA.
