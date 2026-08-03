@@ -282,6 +282,98 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
 
         context = "\n\n".join(context_parts)
         
+        # --- Nástroje (Tools) ---
+        def tool_get_my_accessible_folders():
+            paths = load_monitored_paths()
+            accessible = []
+            for p in paths:
+                acl = p.get("acl", {})
+                if acl.get("is_public"):
+                    accessible.append(p["path"])
+                elif user_email and user_email in acl.get("users", []):
+                    accessible.append(p["path"])
+                elif user_groups and any(g in acl.get("groups", []) for g in user_groups):
+                    accessible.append(p["path"])
+            return "Máš přístup do těchto kořenových složek:\n" + "\n".join(accessible) if accessible else "Nemáš přístup do žádných sledovaných složek."
+
+        def tool_list_directory_contents(target_path: str):
+            paths = load_monitored_paths()
+            accessible = []
+            for p in paths:
+                acl = p.get("acl", {})
+                if acl.get("is_public"):
+                    accessible.append(p["path"])
+                elif user_email and user_email in acl.get("users", []):
+                    accessible.append(p["path"])
+                elif user_groups and any(g in acl.get("groups", []) for g in user_groups):
+                    accessible.append(p["path"])
+            
+            target_norm = target_path.replace("\\", "/").lower()
+            allowed = False
+            for acc_path in accessible:
+                if target_norm.startswith(acc_path.replace("\\", "/").lower()):
+                    allowed = True
+                    break
+                    
+            if not allowed:
+                return f"Přístup odepřen: Uživatel nemá oprávnění k prohlížení složky '{target_path}'."
+                
+            try:
+                if target_path.startswith("\\\\") and os.name != "nt":
+                    norm_path = target_path.replace("\\", "/")
+                    host_netbios = norm_path.lstrip("/").split("/")[0]
+                    host_fqdn = _get_fqdn_host(host_netbios)
+                    p_fqdn = target_path.replace(host_netbios, host_fqdn, 1)
+                    
+                    os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_svc-rag-reader"
+                    # Lístek je obnovován watchdogem, takže jen registrujeme session
+                    smbclient.register_session(host_fqdn, auth_protocol="negotiate")
+                    
+                    entries = smbclient.listdir(p_fqdn)
+                    if len(entries) > 100:
+                        entries = entries[:100] + ["... (zobrazeno pouze prvních 100 položek)"]
+                    return f"Obsah složky '{target_path}':\n" + "\n".join(entries)
+                else:
+                    entries = os.listdir(target_path)
+                    if len(entries) > 100:
+                        entries = entries[:100] + ["... (zobrazeno pouze prvních 100 položek)"]
+                    return f"Obsah složky '{target_path}':\n" + "\n".join(entries)
+            except Exception as e:
+                return f"Nelze načíst obsah složky (může jít o soubor nebo chybu): {str(e)}"
+
+        available_tools = {
+            "get_my_accessible_folders": tool_get_my_accessible_folders,
+            "list_directory_contents": tool_list_directory_contents
+        }
+        
+        tools_schema = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_my_accessible_folders",
+                    "description": "Vrátí seznam kořenových složek, do kterých má aktuální uživatel přístup (dle ACL).",
+                    "parameters": {"type": "object", "properties": {}}
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "list_directory_contents",
+                    "description": "Vrátí seznam souborů a podsložek v zadané složce (pokud má uživatel přístup).",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_path": {
+                                "type": "string",
+                                "description": "Absolutní cesta ke složce (např. \\\\herkules\\public\\složka)."
+                            }
+                        },
+                        "required": ["target_path"]
+                    }
+                }
+            }
+        ]
+        
         def event_generator():
             # Poslat nejprve zdroje
             yield f"data: {json.dumps({"sources": unique_sources}, ensure_ascii=False)}\n\n"
@@ -296,8 +388,76 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
             messages.append({"role": "system", "content": SYSTEM_PROMPT})
             messages.append({"role": "user", "content": f"KONTEXT:\n{context}\n\nOTÁZKA: {question_text}"})
 
-            # ... (zbytek logiky pro odesílání dotazu do Ollamy)
+            # Heuristika pro použití nástrojů: Pokud otázka obsahuje slova o přístupu nebo obsahu, použijeme nástroje.
+            use_tools = any(kw in question_text.lower() for kw in ["přístup", "složk", "obsah", "soubor", "adresář"])
+            
             try:
+                if use_tools:
+                    # Fáze 1: Dotaz bez streamování s nástroji
+                    resp = requests.post(
+                        f"{OLLAMA_URL}/chat",
+                        json={
+                            "model": CHAT_MODEL,
+                            "messages": messages,
+                            "tools": tools_schema,
+                            "stream": False,
+                            "options": {"temperature": 0.3}
+                        }
+                    )
+                    if resp.status_code == 200:
+                        msg_data = resp.json().get("message", {})
+                        if msg_data.get("tool_calls"):
+                            # Model chce zavolat nástroj
+                            messages.append(msg_data)
+                            for tool_call in msg_data["tool_calls"]:
+                                fn_name = tool_call["function"]["name"]
+                                fn_args = tool_call["function"].get("arguments", {})
+                                if fn_name in available_tools:
+                                    try:
+                                        result = available_tools[fn_name](**fn_args)
+                                    except Exception as e:
+                                        result = f"Chyba při volání funkce: {e}"
+                                else:
+                                    result = f"Neznámá funkce: {fn_name}"
+                                
+                                messages.append({
+                                    "role": "tool",
+                                    "content": str(result)
+                                })
+                            
+                            # Fáze 2: Vrácení výsledku nástroje do modelu (již streamovaně)
+                            resp2 = requests.post(
+                                f"{OLLAMA_URL}/chat",
+                                json={
+                                    "model": CHAT_MODEL,
+                                    "messages": messages,
+                                    "stream": True,
+                                    "keep_alive": -1,
+                                    "options": {"temperature": 0.6}
+                                },
+                                stream=True
+                            )
+                            if resp2.status_code == 200:
+                                for line in resp2.iter_lines():
+                                    if line:
+                                        chunk = json.loads(line.decode("utf-8"))
+                                        token = chunk.get("message", {}).get("content", "")
+                                        if token:
+                                            yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+                            else:
+                                yield f"data: {json.dumps({'error': f'Model neodpověděl (HTTP {resp2.status_code}).'}, ensure_ascii=False)}\n\n"
+                            return # Hotovo po vyřešení nástrojů
+                        else:
+                            # Model nepoužil nástroj, můžeme rovnou vrátit celou odpověď (jako jeden velký token)
+                            token = msg_data.get("content", "")
+                            if token:
+                                yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+                            return
+                    else:
+                        yield f"data: {json.dumps({'error': f'Model neodpověděl (HTTP {resp.status_code}).'}, ensure_ascii=False)}\n\n"
+                        return
+
+                # Standardní cesta (bez nástrojů)
                 resp = requests.post(
                     f"{OLLAMA_URL}/chat",
                     json={
@@ -315,14 +475,14 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
                             chunk = json.loads(line.decode("utf-8"))
                             token = chunk.get("message", {}).get("content", "")
                             if token:
-                                yield f"data: {json.dumps({"token": token}, ensure_ascii=False)}\n\n"
+                                yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
                 else:
-                    yield f"data: {json.dumps({"error": f"Model neodpověděl (HTTP {resp.status_code})."}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'error': f'Model neodpověděl (HTTP {resp.status_code}).'}, ensure_ascii=False)}\n\n"
             except requests.exceptions.ConnectionError:
-                yield f"data: {json.dumps({"error": "Chyba spojení s modelem Ollama. Ujistěte se, že běží."}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'error': 'Chyba spojení s modelem Ollama. Ujistěte se, že běží.'}, ensure_ascii=False)}\n\n"
             except Exception as e:
                 traceback.print_exc()
-                yield f"data: {json.dumps({"error": f"Neočekávaná chyba při generování odpovědi: {str(e)}"}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'error': f'Neočekávaná chyba při generování odpovědi: {str(e)}'}, ensure_ascii=False)}\n\n"
 
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     except HTTPException:
