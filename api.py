@@ -393,12 +393,19 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
             
             try:
                 if use_tools:
+                    # Přidáme nápovědu pro model, aby nástroj opravdu použil
+                    messages_with_tool_prompt = messages.copy()
+                    messages_with_tool_prompt.append({
+                        "role": "system",
+                        "content": "POZOR: Uživatel se ptá na složky nebo svá oprávnění. MÁŠ K DISPOZICI NÁSTROJE (tools) `get_my_accessible_folders` a `list_directory_contents`. VŽDY POUŽIJ tyto nástroje k získání reálných dat ze systému namísto obecných odpovědí! Neodpovídej, že nemáš přístup, použij nástroj!"
+                    })
+
                     # Fáze 1: Dotaz bez streamování s nástroji
                     resp = requests.post(
                         f"{OLLAMA_URL}/chat",
                         json={
                             "model": CHAT_MODEL,
-                            "messages": messages,
+                            "messages": messages_with_tool_prompt,
                             "tools": tools_schema,
                             "stream": False,
                             "options": {"temperature": 0.3}
