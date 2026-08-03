@@ -24,6 +24,7 @@ from pydantic import BaseModel
 import requests
 import traceback
 from qdrant_client import QdrantClient
+from qdrant_client.http import models as qmodels
 from fastapi import File, UploadFile
 import io
 from pypdf import PdfReader
@@ -216,11 +217,32 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
             if not vector:
                 raise HTTPException(status_code=500, detail="Nelze komunikovat s modelem pro embedding.")
 
+            # Oprávnění aktuálního uživatele
+            user_data = request.session.get('user') or {}
+            user_email = user_data.get('email') or user_data.get('preferred_username', '')
+            user_groups = user_data.get('groups', [])
+
+            # Sestavení Qdrant ACL Filtru (Vidím pouze: veřejné, nebo mé uživatelské, nebo mé skupinové)
+            should_conditions = [
+                qmodels.FieldCondition(key="acl_is_public", match=qmodels.MatchValue(value=True))
+            ]
+            if user_email:
+                should_conditions.append(
+                    qmodels.FieldCondition(key="acl_users", match=qmodels.MatchAny(any=[user_email]))
+                )
+            if user_groups:
+                should_conditions.append(
+                    qmodels.FieldCondition(key="acl_groups", match=qmodels.MatchAny(any=user_groups))
+                )
+            
+            acl_filter = qmodels.Filter(should=should_conditions)
+
             client = QdrantClient(QDRANT_URL)
             try:
                 qdrant_results = client.query_points(
                     collection_name=COLLECTION_NAME,
                     query=vector,
+                    query_filter=acl_filter,
                     limit=4,
                     score_threshold=0.50 # Zvýšeno skóre threshold pro přesnější výsledky, nebo zakomentovat pro spolehnutí pouze na limit=2
                 ).points
@@ -377,9 +399,46 @@ def get_monitored_paths_endpoint():
 
 
 @app.post("/api/set_monitored_paths")
-def set_monitored_paths_endpoint(paths: list[str]):
+def set_monitored_paths_endpoint(paths: list):
     save_monitored_paths(paths)
     return {"status": "ok", "message": f"Uloženo {len(paths)} monitorovaných cest."}
+
+@app.get("/api/scan_public_folders")
+def scan_public_folders(request: Request):
+    if not request.session.get("user"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    base_unc = "\\\\herkules\\public"
+    if not HAS_SMBCLIENT:
+        raise HTTPException(status_code=500, detail="Knihovna smbclient není k dispozici")
+        
+    try:
+        norm_path = base_unc.replace("\\", "/")
+        host_netbios = norm_path.lstrip("/").split("/")[0]
+        host_fqdn = _get_fqdn_host(host_netbios)
+        p_fqdn = base_unc.replace(host_netbios, host_fqdn, 1)
+
+        os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
+        smbclient.register_session(host_fqdn, auth_protocol="negotiate")
+        
+        folders = []
+        # smbclient.listdir vrátí jména
+        for name in smbclient.listdir(p_fqdn):
+            # Přeskočíme standardní/skryté složky
+            if name.startswith(".") or name.lower() in ("public", "shared"):
+                continue
+            
+            try:
+                stat = smbclient.stat(p_fqdn + "\\\\" + name)
+                if stat.st_file_attributes & 16: # je to složka
+                    email = f"{name.lower()}@axima.cz" # odhad emailu z PrijmeniJ (napr CernyS -> cernys@axima.cz)
+                    folders.append({"folder": name, "email": email})
+            except Exception:
+                continue
+        
+        return {"folders": folders}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # --- OCR příloh (obrázky / screenshoty) ---

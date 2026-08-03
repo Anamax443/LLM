@@ -19,13 +19,19 @@ MANIFEST_FILE = "reconciliation_manifest.json"
 
 qdrant = QdrantClient(QDRANT_URL)
 
+from qdrant_client.http.models import PayloadSchemaType
+
 # Vytvoření kolekce s dimenzí 1024 (odpovídá bge-m3)
 if not qdrant.collection_exists(COLLECTION_NAME):
     qdrant.create_collection(
         collection_name=COLLECTION_NAME,
         vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
     )
-    print(f"[INIT] Vytvořena nová databázová kolekce '{COLLECTION_NAME}'.")
+    # Vytvoření indexů pro bleskurychlé ACL filtrování
+    qdrant.create_payload_index(COLLECTION_NAME, field_name="acl_is_public", field_schema=PayloadSchemaType.BOOL)
+    qdrant.create_payload_index(COLLECTION_NAME, field_name="acl_users", field_schema=PayloadSchemaType.KEYWORD)
+    qdrant.create_payload_index(COLLECTION_NAME, field_name="acl_groups", field_schema=PayloadSchemaType.KEYWORD)
+    print(f"[INIT] Vytvořena nová databázová kolekce '{COLLECTION_NAME}' s ACL indexy.")
 
 def load_manifest():
     if os.path.exists(MANIFEST_FILE):
@@ -128,8 +134,10 @@ def get_smb_file_info(unc_path):
     except Exception:
         return None, None
 
-def index_file(local_path, display_name):
+def index_file(local_path, display_name, acl=None):
     """Rozseká text z lokálního souboru na bloky, vektorizuje a uloží do Qdrantu."""
+    if acl is None:
+        acl = {"is_public": True, "users": [], "groups": []}
     content = extract_text(local_path)
     if len(content.strip()) == 0 or content.startswith("CHYBA:"):
         print(f"[WARN] Soubor '{display_name}' nelze přečíst nebo je prázdný.")
@@ -169,7 +177,14 @@ def index_file(local_path, display_name):
             points.append(PointStruct(
                 id=str(uuid.uuid4()),
                 vector=vector,
-                payload={"source": display_name, "chunk_index": i, "text": chunk}
+                payload={
+                    "source": display_name, 
+                    "chunk_index": i, 
+                    "text": chunk,
+                    "acl_is_public": acl.get("is_public", True),
+                    "acl_users": acl.get("users", []),
+                    "acl_groups": acl.get("groups", [])
+                }
             ))
     
     if points:
@@ -178,8 +193,8 @@ def index_file(local_path, display_name):
         return True
     return False
 
-def process_smb_file(unc_path):
-    """Bezpečně stáhne soubor ze síťového disku do TemporaryDirectory a zaindexuje."""
+def process_smb_file(unc_path, acl=None):
+    """Stáhne soubor z SMB do dočasného souboru a zaindexuje ho."""
     print(f"[DOWNLOAD] Stahuji ze SMB: {unc_path}")
     # TemporaryDirectory se postará o automatický a bezpečný úklid i při pádu
     with tempfile.TemporaryDirectory(prefix="rag_ingest_") as temp_dir:
@@ -197,7 +212,7 @@ def process_smb_file(unc_path):
                 local_f.write(remote_f.read())
             
             # Indexace staženého lokálního souboru
-            return index_file(tmp_path, unc_path_fqdn)
+            return index_file(tmp_path, unc_path_fqdn, acl=acl)
         except Exception as e:
             print(f"[ERROR] Selhalo stažení nebo zpracování souboru {unc_path_fqdn}: {e}")
             return False
@@ -224,7 +239,17 @@ def reconciliation_scan():
         monitored_paths_raw = os.getenv("MONITORED_PATHS", "/data/llm-demo/watchdog/incoming")
         monitored_paths = [p.strip() for p in monitored_paths_raw.split(",") if p.strip()]
 
-    for path_raw in monitored_paths:
+    for path_item in monitored_paths:
+        if isinstance(path_item, dict):
+            path_raw = path_item.get("path", "")
+            acl = path_item.get("acl", {"is_public": True, "users": [], "groups": []})
+        else:
+            path_raw = str(path_item)
+            acl = {"is_public": True, "users": [], "groups": []}
+            
+        if not path_raw:
+            continue
+            
         path = path_raw.replace("\\", "/") # Normalizujeme cestu na dopředná lomítka hned na začátku
 
         if path.startswith("//"):
@@ -233,9 +258,9 @@ def reconciliation_scan():
                 print(f"[WARN] Přeskočeno UNC '{path}': knihovna smbclient není k dispozici.")
                 continue
             
-            _scan_smb_path(path, collection_name=COLLECTION_NAME, manifest=manifest, new_manifest=new_manifest)
+            _scan_smb_path(path, acl, collection_name=COLLECTION_NAME, manifest=manifest, new_manifest=new_manifest)
         else:
-            _scan_local_path(path, collection_name=COLLECTION_NAME, manifest=manifest, new_manifest=new_manifest)
+            _scan_local_path(path, acl, collection_name=COLLECTION_NAME, manifest=manifest, new_manifest=new_manifest)
 
     # Detekce smazaných souborů a pročištění Qdrantu
     for old_file_key in list(manifest.keys()):
@@ -255,7 +280,7 @@ def reconciliation_scan():
     save_manifest(new_manifest)
     print("[RECONCILIATION] Skenovací cyklus dokončen.")
 
-def _scan_smb_path(path, collection_name, manifest, new_manifest):
+def _scan_smb_path(path, acl, collection_name, manifest, new_manifest):
     print(f"[DEBUG] _scan_smb_path zahájeno pro: {path}")
 
     if not HAS_SMBCLIENT:
@@ -312,7 +337,7 @@ def _scan_smb_path(path, collection_name, manifest, new_manifest):
                 old_info = manifest.get(file_key)
                 if not old_info or old_info.get("mtime") != mtime or old_info.get("size") != size:
                     print(f"[INFO] Indexuji nebo aktualizuji: {full_unc_norm}")
-                    success = process_smb_file(full_unc_norm)
+                    success = process_smb_file(full_unc_norm, acl=acl)
                     if not success:
                         if old_info:
                             new_manifest[file_key] = old_info
@@ -322,7 +347,7 @@ def _scan_smb_path(path, collection_name, manifest, new_manifest):
         print(f"[ERROR] Selhání uvnitř _scan_smb_path pro cestu {path}: {e}")
 
 
-def _scan_local_path(path, collection_name, manifest, new_manifest):
+def _scan_local_path(path, acl, collection_name, manifest, new_manifest):
     if not os.path.exists(path):
         print(f"[WARN] Lokální cesta neexistuje: {path}")
         return
@@ -345,7 +370,7 @@ def _scan_local_path(path, collection_name, manifest, new_manifest):
             
             old_info = manifest.get(file_key)
             if not old_info or old_info.get("mtime") != mtime or old_info.get("size") != size:
-                success = index_file(full_local, full_local)
+                success = index_file(full_local, full_local, acl=acl)
                 if not success:
                     if old_info:
                         new_manifest[file_key] = old_info

@@ -289,8 +289,9 @@ label.field span.help-icon:hover { color: var(--accent); border-color: var(--acc
         </thead>
         <tbody id="pathsBody"></tbody>
       </table>
-      <div class="row" style="margin-top:14px;">
+      <div class="row" style="margin-top:14px; gap:8px; display:flex; align-items:center;">
         <button class="btn secondary" id="addPathBtn" data-i18n="settings.add">+ Přidat cestu</button>
+        <button class="btn secondary" id="autoLoadPersonalBtn" style="border-color:var(--accent); color:var(--accent);">Automaticky načíst osobní složky</button>
         <button class="btn" id="verifyBtn" data-i18n="verify.btn">Ověřit dostupnost cest</button>
       </div>
       <div class="terminal" id="verifyTerm"></div>
@@ -649,7 +650,13 @@ async function loadPaths() {
     const response = await fetch(`${API_BASE}/monitored_paths`);
     if (!response.ok) throw new Error("Backend error");
     const data = await response.json();
-    paths = data.map(path => ({ path: path, sub: true, ext: "docx,pdf,xlsx", ok: true, on: true })); // Předpokládáme, že backend vrací jen stringy cest
+    paths = data.map(item => {
+      if (typeof item === 'string') {
+        return { path: item, sub: true, ext: "docx,pdf,xlsx", ok: true, on: true, acl: { is_public: true, users: [], groups: [] } };
+      } else {
+        return { path: item.path, sub: true, ext: "docx,pdf,xlsx", ok: true, on: true, acl: item.acl || { is_public: true, users: [], groups: [] } };
+      }
+    });
     dataVerified = true;
     renderPaths();
   } catch (e) {
@@ -665,7 +672,14 @@ function renderPaths(){
   paths.forEach((p, i) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><code>${p.path}</code></td>
+      <td>
+        <code>${p.path}</code>
+        <div style="margin-top: 6px; font-size: 11px; display: flex; align-items: center; gap: 8px;">
+          <label style="display:flex; align-items:center; gap:4px; cursor:pointer;"><input type="checkbox" data-acl-pub="${i}" ${p.acl.is_public ? "checked" : ""}> Veřejné</label>
+          <input type="text" data-acl-usrs="${i}" value="${p.acl.users.join(', ')}" placeholder="E-maily (čárkou)" style="width: 140px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--text);">
+          <input type="text" data-acl-grps="${i}" value="${p.acl.groups.join(', ')}" placeholder="Skupiny (čárkou)" style="width: 140px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--text);">
+        </div>
+      </td>
       <td>${p.sub ? "✓" : "—"}</td>
       <td>${p.ext}</td>
       <td>${!dataVerified ? '<span class="badge off">'+t("state.unverified")+'</span>' : (p.ok ? '<span class="badge ok">'+(lang==="cs"?"dostupná":"reachable")+'</span>' : '<span class="badge err">'+(lang==="cs"?"nedostupná":"down")+'</span>')}</td>
@@ -673,6 +687,10 @@ function renderPaths(){
       <td><button class="btn secondary" data-rm="${i}" style="padding:4px 10px;">✕</button></td>`;
     b.appendChild(tr);
   });
+    b.querySelectorAll("[data-acl-pub]").forEach(el => el.onchange = () => { paths[el.dataset.aclPub].acl.is_public = el.checked; savePaths(); });
+    b.querySelectorAll("[data-acl-usrs]").forEach(el => el.onchange = () => { paths[el.dataset.aclUsrs].acl.users = el.value.split(',').map(s=>s.trim()).filter(s=>s); savePaths(); });
+    b.querySelectorAll("[data-acl-grps]").forEach(el => el.onchange = () => { paths[el.dataset.aclGrps].acl.groups = el.value.split(',').map(s=>s.trim()).filter(s=>s); savePaths(); });
+    
     b.querySelectorAll("[data-i]").forEach(el => el.onclick = () => { paths[el.dataset.i].on = !paths[el.dataset.i].on; savePaths(); });
     b.querySelectorAll("[data-rm]").forEach(el => el.onclick = () => {
       const msg = lang==="cs" ? "Odebrat cestu? Její dokumenty se smažou i ze znalostní báze." : "Remove path? Its documents will also be deleted from the knowledge base.";
@@ -686,7 +704,7 @@ function renderPaths(){
       const response = await fetch(`${API_BASE}/set_monitored_paths`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(paths.map(p => p.path))
+        body: JSON.stringify(paths.map(p => ({ path: p.path, acl: p.acl })))
       });
       if (!response.ok) throw new Error("Backend error");
       console.log("Cesty uloženy na backendu.");
@@ -698,7 +716,46 @@ function renderPaths(){
 
   document.getElementById("addPathBtn").onclick = () => {
     const p = prompt(lang==="cs" ? "Zadejte cestu (UNC nebo mount):" : "Enter path (UNC or mount):", "\\\\fileserver\\");
-    if (p) { paths.push({ path:p, sub:true, ext:"docx,pdf,xlsx", ok:true, on:true }); savePaths(); }
+    if (p) { 
+        paths.push({ path:p, sub:true, ext:"docx,pdf,xlsx", ok:true, on:true, acl: { is_public: true, users: [], groups: [] } }); 
+        savePaths(); 
+        renderPaths();
+    }
+  };
+
+  document.getElementById("autoLoadPersonalBtn").onclick = async () => {
+    const btn = document.getElementById("autoLoadPersonalBtn");
+    btn.disabled = true;
+    const originalText = btn.innerText;
+    btn.innerText = "Načítám...";
+    try {
+        const response = await fetch(`${API_BASE}/scan_public_folders`);
+        if (!response.ok) throw new Error("Nelze načíst ze serveru");
+        const data = await response.json();
+        let added = 0;
+        data.folders.forEach(f => {
+            const p = "\\\\\\\\herkules\\\\public\\\\" + f.folder;
+            if (!paths.some(existing => existing.path.toLowerCase() === p.toLowerCase())) {
+                paths.push({ 
+                    path: p, sub:true, ext:"docx,pdf,xlsx", ok:true, on:true, 
+                    acl: { is_public: false, users: [f.email], groups: [] } 
+                });
+                added++;
+            }
+        });
+        if (added > 0) {
+            savePaths();
+            renderPaths();
+            alert(`Nalezeno a přidáno ${added} osobních složek.`);
+        } else {
+            alert("Nenalezeny žádné nové osobní složky k přidání.");
+        }
+    } catch (e) {
+        alert("Chyba při automatickém načítání složek: " + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
   };
   document.getElementById("saveSettings").onclick = () => {
     alert(lang==="cs" ? "Uloženo (ukázka). Po napojení na backend se pošle na POST /api/settings." : "Saved (sample). Once wired, this POSTs to /api/settings.");
