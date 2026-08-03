@@ -290,7 +290,7 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
                 acl = p.get("acl", {})
                 if acl.get("is_public"):
                     accessible.append(p["path"])
-                elif user_email and user_email in acl.get("users", []):
+                elif user_email and user_email.lower() in [u.lower() for u in acl.get("users", [])]:
                     accessible.append(p["path"])
                 elif user_groups and any(g in acl.get("groups", []) for g in user_groups):
                     accessible.append(p["path"])
@@ -303,7 +303,7 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
                 acl = p.get("acl", {})
                 if acl.get("is_public"):
                     accessible.append(p["path"])
-                elif user_email and user_email in acl.get("users", []):
+                elif user_email and user_email.lower() in [u.lower() for u in acl.get("users", [])]:
                     accessible.append(p["path"])
                 elif user_groups and any(g in acl.get("groups", []) for g in user_groups):
                     accessible.append(p["path"])
