@@ -28,7 +28,7 @@ lokální os.walk                            ▼
                           ◄── odpověď + zdroje (SSE stream) ──
 ```
 
-- **AI backend:** [Ollama](https://ollama.com) (port 11434) — `bge-m3` (1024D embeddingy) + `mistral-nemo` (generování odpovědí).
+- **AI backend:** [Ollama](https://ollama.com) (port 11434) — `bge-m3` (1024D embeddingy) + `qwen2.5:14b` (generování odpovědí, trvale načteno v paměti pomocí `keep_alive: -1` pro okamžitou odezvu).
 - **Vektorová DB:** [Qdrant](https://qdrant.tech) (port 6333), kolekce `axima_docs`, 1024D, kosinová vzdálenost.
 - **Ingest:** `watchdog_service.py` běží jako periodický **reconciliation sken** hlídaných cest (lokálních i UNC `\\server\share` přes user-space `smbclient` + Kerberos). Porovnává stav se souborem `reconciliation_manifest.json` (mtime/velikost), doindexuje změněné, **smaže bloky u smazaných souborů** i **staré bloky před re-indexem** (žádné míchání verzí). Aktuálně se indexují soubory **`.docx` a `.pdf`**; chunk 1000/200, ke každému bloku se přidává název zdroje. Interval `RECONCILIATION_INTERVAL_SEC` (default 30 s dev / doporučeno 900 s prod).
 - **API:** `api.py` (FastAPI, port 8000):
@@ -73,7 +73,7 @@ docker run -d -p 6333:6333 -v $(pwd)/qdrant_storage:/qdrant/storage qdrant/qdran
 
 # 2) Ollama + modely
 ollama pull bge-m3           # embedding, 1024D
-ollama pull mistral-nemo     # generování odpovědí
+ollama pull qwen2.5:14b      # generování odpovědí (vyžaduje GPU s dostatkem VRAM, např. RTX 5060 Ti)
 
 # 3) Python prostředí
 python3 -m venv venv && source venv/bin/activate
