@@ -154,7 +154,29 @@ def init_smb_session_for_path(unc_path):
         try:
             # Registrace session pouze pro FQDN hosta s Kerberem.
             # auth_protocol="negotiate" automaticky vyjedná NTLMv2 nebo Kerberos.
-            os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima" # Nastavení ccache přes proměnnou prostředí
+            os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_svc-rag-reader"
+                
+            # Automatická obnova Kerberos lístku z keytabu
+            try:
+                import subprocess
+                subprocess.run(
+                    [
+                        "kinit", 
+                        "-k", 
+                        "-t", "/home/aixima/svc-rag-reader.keytab", 
+                        "svc-rag-reader@AXINETWORK.LOC"
+                    ], 
+                    capture_output=True, 
+                    check=True
+                )
+            except subprocess.CalledProcessError as e:
+                err_msg = e.stderr.decode('utf-8', errors='replace')
+                print(f"[WARN] Nepodařilo se obnovit Kerberos lístek z keytabu: {err_msg}")
+                raise HTTPException(status_code=500, detail=f"Kinit selhal: {err_msg}")
+            except Exception as e:
+                print(f"[WARN] Nelze spustit kinit: {e}")
+                raise HTTPException(status_code=500, detail=f"Nelze spustit kinit: {e}")
+
             smbclient.register_session(host_fqdn, auth_protocol="negotiate")
         except smbclient.exceptions.SMBException as e:
             print(f"[DEBUG] Chyba při registraci SMB session pro {host_fqdn}: {e}")
@@ -419,7 +441,29 @@ def scan_public_folders(request: Request):
         host_fqdn = _get_fqdn_host(host_netbios)
         p_fqdn = base_unc.replace(host_netbios, host_fqdn, 1)
 
-        os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
+        os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_svc-rag-reader"
+        
+        # Automatická obnova Kerberos lístku z keytabu
+        try:
+            import subprocess
+            subprocess.run(
+                [
+                    "kinit", 
+                    "-k", 
+                    "-t", "/home/aixima/svc-rag-reader.keytab", 
+                    "svc-rag-reader@AXINETWORK.LOC"
+                ], 
+                capture_output=True, 
+                check=True
+            )
+        except subprocess.CalledProcessError as e:
+            err_msg = e.stderr.decode('utf-8', errors='replace')
+            print(f"[WARN] Nepodařilo se obnovit Kerberos lístek z keytabu: {err_msg}")
+            raise HTTPException(status_code=500, detail=f"Kinit selhal: {err_msg}")
+        except Exception as e:
+            print(f"[WARN] Nelze spustit kinit: {e}")
+            raise HTTPException(status_code=500, detail=f"Nelze spustit kinit: {e}")
+
         smbclient.register_session(host_fqdn, auth_protocol="negotiate")
         
         folders = []

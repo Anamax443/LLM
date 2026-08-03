@@ -114,7 +114,24 @@ def init_smb_session(unc_path):
         host_netbios = parts[0]
         host_fqdn = _get_fqdn_host(host_netbios)
         try:
-            os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
+            os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_svc-rag-reader"
+            
+            # Automatická obnova Kerberos lístku z keytabu
+            try:
+                import subprocess
+                subprocess.run(
+                    [
+                        "kinit", 
+                        "-k", 
+                        "-t", "/home/aixima/svc-rag-reader.keytab", 
+                        "svc-rag-reader@AXINETWORK.LOC"
+                    ], 
+                    capture_output=True, 
+                    check=True
+                )
+            except Exception as e:
+                print(f"[WARN] Nepodařilo se obnovit Kerberos lístek z keytabu: {e}")
+
             smbclient.register_session(host_fqdn, auth_protocol="negotiate")
             return True
         except Exception as e:
@@ -311,7 +328,24 @@ def _scan_smb_path(path, acl, collection_name, manifest, new_manifest):
         print(f"[DEBUG] Konvertovaná FQDN Windows cesta pro smbclient: {win_path_fqdn}")
 
         # 3. Registrace session
-        os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
+        os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_svc-rag-reader"
+        
+        # Automatická obnova Kerberos lístku z keytabu
+        try:
+            import subprocess
+            subprocess.run(
+                [
+                    "kinit", 
+                    "-k", 
+                    "-t", "/home/aixima/svc-rag-reader.keytab", 
+                    "svc-rag-reader@AXINETWORK.LOC"
+                ], 
+                capture_output=True, 
+                check=True
+            )
+        except Exception as e:
+            print(f"[WARN] Nepodařilo se obnovit Kerberos lístek z keytabu: {e}")
+
         smbclient.register_session(host_fqdn, auth_protocol="negotiate")
         print(f"[DEBUG] SMB session registrována pro {host_fqdn}")
         
