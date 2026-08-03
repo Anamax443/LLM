@@ -421,8 +421,10 @@ def get_monitored_paths_endpoint():
     return load_monitored_paths()
 
 
+from fastapi import Body
+
 @app.post("/api/set_monitored_paths")
-def set_monitored_paths_endpoint(paths: list):
+def set_monitored_paths_endpoint(paths: list = Body(...)):
     save_monitored_paths(paths)
     return {"status": "ok", "message": f"Uloženo {len(paths)} monitorovaných cest."}
 
