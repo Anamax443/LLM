@@ -358,6 +358,19 @@ def verify_paths(req: VerifyRequest):
                 p_fqdn = p.replace(host_netbios, host_fqdn, 1)
 
                 os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima" # Nastavení ccache přes proměnnou prostředí
+                
+                # Automatická obnova Kerberos lístku před SMB relací
+                try:
+                    import subprocess
+                    subprocess.run(
+                        ["kinit", "aixima@AXINETWORK.LOC"], 
+                        input=b"aixima2026\n",
+                        capture_output=True, 
+                        check=True
+                    )
+                except Exception as e:
+                    print(f"[WARN] Nepodařilo se obnovit Kerberos lístek: {e}")
+
                 smbclient.register_session(host_fqdn, auth_protocol="negotiate")
                 
                 # Musíš použít novou cestu p_fqdn!
@@ -419,6 +432,19 @@ def scan_public_folders(request: Request):
         p_fqdn = base_unc.replace(host_netbios, host_fqdn, 1)
 
         os.environ["KRB5CCNAME"] = "FILE:/home/aixima/krb5cc_axima"
+        
+        # Automatická obnova Kerberos lístku před SMB relací
+        try:
+            import subprocess
+            subprocess.run(
+                ["kinit", "aixima@AXINETWORK.LOC"], 
+                input=b"aixima2026\n",
+                capture_output=True, 
+                check=True
+            )
+        except Exception as e:
+            print(f"[WARN] Nepodařilo se obnovit Kerberos lístek: {e}")
+
         smbclient.register_session(host_fqdn, auth_protocol="negotiate")
         
         folders = []
