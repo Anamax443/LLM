@@ -527,10 +527,10 @@ label.field span.help-icon:hover { color: var(--accent); border-color: var(--acc
     <div class="card">
       <h3 data-i18n="mgr.numbers">Souhrn</h3>
       <div class="stat-grid">
-        <div class="stat"><div class="n" id="stDocs">128</div><div class="l" data-i18n="mgr.docs">dokumentů v bázi</div></div>
-        <div class="stat"><div class="n" id="stChunks">2 940</div><div class="l" data-i18n="mgr.chunks">textových bloků</div></div>
-        <div class="stat"><div class="n" id="stPaths">4</div><div class="l" data-i18n="mgr.areas">sledované oblasti</div></div>
-        <div class="stat"><div class="n" id="stUpdated">1. 7. 2026</div><div class="l" data-i18n="mgr.lastScan">poslední aktualizace</div></div>
+        <div class="stat"><div class="n" id="stDocs">—</div><div class="l" data-i18n="mgr.docs">dokumentů v bázi</div></div>
+        <div class="stat"><div class="n" id="stChunks">—</div><div class="l" data-i18n="mgr.chunks">textových bloků</div></div>
+        <div class="stat"><div class="n" id="stPaths">—</div><div class="l" data-i18n="mgr.areas">sledované oblasti</div></div>
+        <div class="stat"><div class="n" id="stUpdated">—</div><div class="l" data-i18n="mgr.lastScan">poslední aktualizace</div></div>
       </div>
     </div>
 
@@ -540,14 +540,14 @@ label.field span.help-icon:hover { color: var(--accent); border-color: var(--acc
         <thead>
           <tr>
             <th data-i18n="mgr.col.area">Oblast / cesta</th>
-            <th data-i18n="mgr.col.cat">Kategorie</th>
+            <th data-i18n="mgr.col.cat">Přístup</th>
             <th class="num" data-i18n="mgr.col.count">Dokumentů</th>
             <th data-i18n="mgr.col.updated">Aktualizováno</th>
           </tr>
         </thead>
         <tbody id="scopeBody"></tbody>
       </table>
-      <p class="hint" style="margin-top:10px;" data-i18n="mgr.scopeHint">Zobrazená čísla jsou vzorová — po napojení na backend se načítají živě z databáze (GET /api/scope).</p>
+      <p class="hint" style="margin-top:10px;" data-i18n="mgr.scopeHint">Čísla i oblasti se načítají živě z vektorové databáze (Qdrant) a ze sledovaných cest v Nastavení. Časy „aktualizováno“ pocházejí z posledního skenu; kde je „—“, čas zatím není k dispozici.</p>
     </div>
   </section>
 
@@ -577,8 +577,8 @@ const I18N = {
     "mgr.scopeTitle":"Rozsah znalostní báze","mgr.what":"O co jde",
     "mgr.whatText":"Interní AI asistent, který odpovídá na dotazy zaměstnanců na základě firemní dokumentace. Veškerá data zůstávají na lokálním serveru — nic se neodesílá do cloudu (ISO 27001 / NIS2). U každé odpovědi uvádí zdroj. Podporuje streamované odpovědi, přílohy k dotazu (dokumenty i screenshoty přes OCR) a jazyky CS/EN.",
     "mgr.numbers":"Souhrn","mgr.docs":"dokumentů v bázi","mgr.chunks":"textových bloků","mgr.areas":"sledované oblasti","mgr.lastScan":"poslední aktualizace",
-    "mgr.scope":"Na jakou oblast dokumentů se asistent vztahuje","mgr.col.area":"Oblast / cesta","mgr.col.cat":"Kategorie","mgr.col.count":"Dokumentů","mgr.col.updated":"Aktualizováno",
-    "mgr.scopeHint":"Zobrazená čísla jsou vzorová — po napojení na backend se načítají živě z databáze (GET /api/scope).",
+    "mgr.scope":"Na jakou oblast dokumentů se asistent vztahuje","mgr.col.area":"Oblast / cesta","mgr.col.cat":"Přístup","mgr.col.count":"Dokumentů","mgr.col.updated":"Aktualizováno",
+    "mgr.scopeHint":"Čísla i oblasti se načítají živě z vektorové databáze (Qdrant) a ze sledovaných cest v Nastavení. Časy „aktualizováno“ pocházejí z posledního skenu; kde je „—“, čas zatím není k dispozici.",
     "footer.checking":"Zjišťuji stav…","footer.commit":"Verze:","footer.ok":"Backend běží","footer.err":"Backend nedostupný (ukázkový režim)"
   },
   en: {
@@ -602,8 +602,8 @@ const I18N = {
     "mgr.scopeTitle":"Knowledge base scope","mgr.what":"What it is",
     "mgr.whatText":"An internal AI assistant that answers employee questions from company documentation. All data stays on the local server — nothing is sent to the cloud (ISO 27001 / NIS2). Every answer cites its source. It supports streamed answers, query attachments (documents and screenshots via OCR) and CS/EN.",
     "mgr.numbers":"Summary","mgr.docs":"documents in base","mgr.chunks":"text blocks","mgr.areas":"watched areas","mgr.lastScan":"last update",
-    "mgr.scope":"Which document areas the assistant covers","mgr.col.area":"Area / path","mgr.col.cat":"Category","mgr.col.count":"Documents","mgr.col.updated":"Updated",
-    "mgr.scopeHint":"Numbers shown are samples — once wired to the backend they load live from the database (GET /api/scope).",
+    "mgr.scope":"Which document areas the assistant covers","mgr.col.area":"Area / path","mgr.col.cat":"Access","mgr.col.count":"Documents","mgr.col.updated":"Updated",
+    "mgr.scopeHint":"Numbers and areas load live from the vector database (Qdrant) and from the watched paths in Settings. “Updated” times come from the last scan; where you see “—”, the time is not available yet.",
     "footer.checking":"Checking status…","footer.commit":"Version:","footer.ok":"Backend online","footer.err":"Backend unavailable (sample mode)"
   }
 };
@@ -862,23 +862,69 @@ document.getElementById("scanNowBtn").onclick = () => {
   }, 1500);
 };
 
-/* ================= Manager: scope (sample data) ================= */
-const scope = [
-  { area:"\\\\fileserver\\Smernice", cat:{cs:"Směrnice a politiky",en:"Policies"}, n:42, up:"28. 6. 2026" },
-  { area:"\\\\fileserver\\IT\\Postupy", cat:{cs:"IT postupy",en:"IT procedures"}, n:57, up:"1. 7. 2026" },
-  { area:"\\\\fileserver\\Infrastruktura", cat:{cs:"Infrastruktura, IP plán",en:"Infrastructure, IP plan"}, n:19, up:"20. 6. 2026" },
-  { area:"\\\\nas02\\Provoz\\Zalohy", cat:{cs:"Zálohování",en:"Backups"}, n:10, up:"15. 6. 2026" }
-];
+/* ================= Manager: scope (živá data z backendu — GET /api/scope) ================= */
+let lastScope = null; // poslední ověřená odpověď backendu (kvůli re-renderu při přepnutí jazyka)
+
+function _nf(n){ return Number(n).toLocaleString(lang === "cs" ? "cs-CZ" : "en-US"); }
+function _fmtDate(iso){
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString(lang === "cs" ? "cs-CZ" : "en-GB");
+}
+function _accessLabel(row){
+  // „Kategorie" = reálný přístup dle ACL z Nastavení (ne vymyšlené štítky).
+  if (row.public) return lang === "cs" ? "Veřejné (všichni)" : "Public (everyone)";
+  const parts = [];
+  if (row.users && row.users.length) parts.push((lang === "cs" ? "uživatelé: " : "users: ") + row.users.join(", "));
+  if (row.groups && row.groups.length) parts.push((lang === "cs" ? "skupiny: " : "groups: ") + row.groups.join(", "));
+  const base = lang === "cs" ? "Omezené" : "Restricted";
+  return parts.length ? base + " — " + parts.join("; ") : base;
+}
+
+async function loadScope(){
+  try {
+    const res = await fetch(`${API_BASE}/scope`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    lastScope = await res.json();
+  } catch (e) {
+    console.error("Nepodařilo se načíst rozsah báze z backendu:", e);
+    lastScope = null; // nefabrikujeme — UI ukáže „—"
+  }
+  renderScope();
+}
+
 function renderScope(){
-  const b = document.getElementById("scopeBody"); b.innerHTML = "";
-  scope.forEach(s => {
+  const setStat = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+  const b = document.getElementById("scopeBody");
+  if (!b) return;
+
+  // Bez ověřených dat z backendu nic nevymýšlíme — ukážeme „—".
+  if (!lastScope) {
+    ["stDocs","stChunks","stPaths","stUpdated"].forEach(id => setStat(id, "—"));
+    b.innerHTML = `<tr><td colspan="4" class="hint">${lang === "cs" ? "Rozsah báze se nepodařilo načíst z backendu." : "Could not load knowledge-base scope from the backend."}</td></tr>`;
+    return;
+  }
+
+  const d = lastScope;
+  setStat("stDocs", _nf(d.docs));
+  setStat("stChunks", _nf(d.chunks));
+  setStat("stPaths", _nf(d.areas));
+  setStat("stUpdated", _fmtDate(d.updated));
+
+  b.innerHTML = "";
+  (d.scope || []).forEach(s => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td><code>${s.area}</code></td><td>${s.cat[lang]||s.cat.cs}</td><td class="num">${dataVerified ? s.n : "—"}</td><td>${dataVerified ? s.up : "—"}</td>`;
+    tr.innerHTML = `<td><code>${escapeHTML(s.area)}</code></td><td>${escapeHTML(_accessLabel(s))}</td><td class="num">${_nf(s.documents)}</td><td>${_fmtDate(s.updated)}</td>`;
     b.appendChild(tr);
   });
-  // Souhrnná čísla jsou reálná jen z backendu; jinak "—" (neplést vzorek s ověřeným stavem).
-  const setStat = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = dataVerified ? val : "—"; };
-  setStat("stDocs","128"); setStat("stChunks","2 940"); setStat("stPaths","4"); setStat("stUpdated","1. 7. 2026");
+  if (d.unassigned && d.unassigned > 0) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td><em>${lang === "cs" ? "(mimo sledované cesty)" : "(outside watched paths)"}</em></td><td>—</td><td class="num">${_nf(d.unassigned)}</td><td>—</td>`;
+    b.appendChild(tr);
+  }
+  if (!b.children.length) {
+    b.innerHTML = `<tr><td colspan="4" class="hint">${lang === "cs" ? "Zatím žádné sledované oblasti ani dokumenty." : "No watched areas or documents yet."}</td></tr>`;
+  }
 }
 document.getElementById("printBtn").onclick = () => {
   const wasLight = theme === "light";
@@ -1195,7 +1241,7 @@ applyHeaderExtras();
          applyHeaderExtras();
        }
      }
-     applyTheme(); applyLang(); loadVersion(); loadPaths(); loadConfig(); tick(); setInterval(tick, 1000);
+     applyTheme(); applyLang(); loadVersion(); loadPaths(); loadConfig(); loadScope(); tick(); setInterval(tick, 1000);
 
 fetch('/api/auth/me')
   .then(res => {

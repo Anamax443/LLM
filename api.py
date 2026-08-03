@@ -597,6 +597,148 @@ def set_monitored_paths_endpoint(paths: list = Body(...)):
     save_monitored_paths(paths)
     return {"status": "ok", "message": f"Uloženo {len(paths)} monitorovaných cest."}
 
+
+# Manifest reconciliation skenu (zapisuje watchdog_service.py) — jediný zdroj časů poslední změny.
+RECON_MANIFEST_FILE = os.path.join(BASE_DIR, "reconciliation_manifest.json")
+
+
+def _norm_scope_path(p):
+    """Sjednotí cestu pro porovnání: dopředná lomítka, malá písmena, bez FQDN domény a koncového lomítka."""
+    p = (p or "").replace("\\", "/").lower()
+    p = p.replace(".axinetwork.loc", "")
+    return p.rstrip("/")
+
+
+def _load_recon_manifest():
+    """Best-effort načtení manifestu (mtime/size per soubor). Když chybí, vrátí {} (časy pak budou null)."""
+    for cand in (RECON_MANIFEST_FILE, "reconciliation_manifest.json"):
+        if os.path.exists(cand):
+            try:
+                with open(cand, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data if isinstance(data, dict) else {}
+            except Exception:
+                return {}
+    return {}
+
+
+@app.get("/api/scope")
+def get_scope(request: Request):
+    """Reálný rozsah znalostní báze pro Manažerský výstup.
+
+    Počty dokumentů a bloků čte ŽIVĚ z Qdrantu, sledované oblasti z monitored_paths.json
+    (to samé, co je v Nastavení), časy poslední změny best-effort z reconciliation manifestu.
+    Nic se nefabrikuje — co nelze zjistit (např. čas bez manifestu), vrací se jako null a UI
+    ukáže „—".
+    """
+    if not request.session.get('user'):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # 1) Sledované oblasti z Nastavení (monitored_paths.json)
+    areas = []
+    for item in load_monitored_paths():
+        if isinstance(item, dict):
+            p = item.get("path", "")
+            acl = item.get("acl") or {}
+        else:
+            p = str(item)
+            acl = {}
+        if p:
+            areas.append({"path": p, "acl": acl, "norm": _norm_scope_path(p)})
+
+    # 2) Živé počty z Qdrantu: bloky celkem + unikátní zdroje (dokumenty) + bloky na zdroj
+    per_source = {}
+    total_chunks = 0
+    try:
+        client = QdrantClient(QDRANT_URL)
+        total_chunks = client.count(collection_name=COLLECTION_NAME, exact=True).count
+        next_offset = None
+        while True:
+            points, next_offset = client.scroll(
+                collection_name=COLLECTION_NAME,
+                with_payload=["source"],
+                with_vectors=False,
+                limit=1000,
+                offset=next_offset,
+            )
+            for pt in points:
+                src = (pt.payload or {}).get("source")
+                if src:
+                    per_source[src] = per_source.get(src, 0) + 1
+            if not next_offset:
+                break
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Vektorová databáze (Qdrant) je nedostupná: {e}")
+
+    total_docs = len(per_source)
+
+    # 3) Časy poslední změny z manifestu (best-effort), klíčované normalizovanou cestou souboru
+    manifest_mtime = {}
+    for fk, info in _load_recon_manifest().items():
+        try:
+            mt = (info or {}).get("mtime")
+            manifest_mtime[_norm_scope_path(fk)] = float(mt) if mt is not None else None
+        except Exception:
+            continue
+
+    # Oblasti od nejspecifičtější (nejdelší cesta) → dokument přiřadíme jen k nejtěsnější oblasti
+    ordered = sorted(range(len(areas)), key=lambda i: len(areas[i]["norm"]), reverse=True)
+
+    def _match_area(src_norm):
+        for i in ordered:
+            an = areas[i]["norm"]
+            if an and (src_norm == an or src_norm.startswith(an + "/")):
+                return i
+        return None
+
+    area_docs = [0] * len(areas)
+    area_mtime = [None] * len(areas)
+    unassigned = 0
+    latest_overall = None
+
+    for src in per_source:
+        sn = _norm_scope_path(src)
+        mt = manifest_mtime.get(sn)
+        if mt is not None and (latest_overall is None or mt > latest_overall):
+            latest_overall = mt
+        i = _match_area(sn)
+        if i is None:
+            unassigned += 1
+            continue
+        area_docs[i] += 1
+        if mt is not None and (area_mtime[i] is None or mt > area_mtime[i]):
+            area_mtime[i] = mt
+
+    def _iso(ts):
+        if ts is None:
+            return None
+        try:
+            return datetime.fromtimestamp(ts, timezone.utc).isoformat()
+        except Exception:
+            return None
+
+    scope_rows = []
+    for i, a in enumerate(areas):
+        acl = a["acl"] or {}
+        scope_rows.append({
+            "area": a["path"],
+            "public": bool(acl.get("is_public", True)),
+            "users": acl.get("users") or [],
+            "groups": acl.get("groups") or [],
+            "documents": area_docs[i],
+            "updated": _iso(area_mtime[i]),
+        })
+
+    return {
+        "docs": total_docs,
+        "chunks": total_chunks,
+        "areas": len(areas),
+        "updated": _iso(latest_overall),
+        "unassigned": unassigned,
+        "scope": scope_rows,
+    }
+
+
 @app.get("/api/scan_public_folders")
 def scan_public_folders(request: Request):
     if not request.session.get("user"):
