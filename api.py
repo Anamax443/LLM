@@ -241,8 +241,10 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
 
             # Oprávnění aktuálního uživatele
             user_data = request.session.get('user') or {}
-            user_email = user_data.get('email') or user_data.get('preferred_username', '')
+            print(f"[DEBUG] User data z tokenu: {user_data}")
+            user_email = user_data.get('email') or user_data.get('preferred_username', '') or user_data.get('upn', '') or user_data.get('unique_name', '')
             user_groups = user_data.get('groups', [])
+            print(f"[DEBUG] Zjištěný email: {user_email}")
 
             # Sestavení Qdrant ACL Filtru (Vidím pouze: veřejné, nebo mé uživatelské, nebo mé skupinové)
             should_conditions = [
