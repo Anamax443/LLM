@@ -116,7 +116,7 @@ def _git(*args):
 QDRANT_URL = "http://localhost:6333"
 OLLAMA_URL = "http://localhost:11434/api"
 COLLECTION_NAME = "axima_docs"
-CHAT_MODEL = "mistral-nemo"
+CHAT_MODEL = "llama3"
 
 # Pravidla chování asistenta.
 SYSTEM_PROMPT = """Odpovídej VŽDY a VÝHRADNĚ v českém jazyce. Jsi znalostní a konverzační asistent firmy AXIMA.
@@ -260,6 +260,7 @@ def ask_ai_endpoint(req: QueryRequest, request: Request):
                         "model": CHAT_MODEL,
                         "messages": messages,
                         "stream": True,
+                        "keep_alive": -1,
                         "options": {"temperature": 0.6}
                     },
                     stream=True
